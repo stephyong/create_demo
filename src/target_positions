@@ -1,0 +1,316 @@
+STARTING RECEIVING POSITION
+	total count change:1
+	total count: 1---
+header:
+  stamp:
+    sec: 1766307270
+    nanosec: 970242042
+  frame_id: base_link
+name:
+- right_elbow_joint
+- right_wrist_1_joint
+- right_wrist_2_joint
+- right_shoulder_pan_joint
+- left_elbow_joint
+- right_shoulder_lift_joint
+- left_shoulder_lift_joint
+- left_shoulder_pan_joint
+- left_wrist_3_joint
+- left_wrist_2_joint
+- right_wrist_3_joint
+- left_wrist_1_joint
+position:
+- 0.0
+- -1.57
+- 0.0
+- 0.0
+- -2.3778812969344134
+- -1.57
+- 0.2683460807141523
+- 2.2390672293524303
+- 0.0022435144298070782
+- -0.5764915930598724
+- 0.0
+- -1.03478938892059
+velocity:
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+effort:
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+-----------------------------------------
+
+PREHANDOVER POSITION left arm
+header:
+  stamp:
+    sec: 1766307641
+    nanosec: 464216669
+  frame_id: base_link
+name:
+- right_elbow_joint
+- right_wrist_1_joint
+- right_wrist_2_joint
+- right_shoulder_pan_joint
+- left_elbow_joint
+- right_shoulder_lift_joint
+- left_shoulder_lift_joint
+- left_shoulder_pan_joint
+- left_wrist_3_joint
+- left_wrist_2_joint
+- right_wrist_3_joint
+- left_wrist_1_joint
+position:
+- 0.0
+- -1.57
+- 0.0
+- 0.0
+- -2.3778812969344134
+- -1.57
+- 0.2683460807141523
+- 2.2390672293524303
+- 0.0022435144298070782
+- -0.5764915930598724
+- 0.0
+- -1.03478938892059
+velocity:
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+effort:
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+-------------------------------------------------------
+
+PREHANDOVER POSITION RIGHT ARM
+A message was lost!!!
+	total count change:1
+	total count: 1---
+header:
+  stamp:
+    sec: 1766307964
+    nanosec: 468367957
+  frame_id: base_link
+name:
+- right_elbow_joint
+- right_wrist_1_joint
+- right_wrist_2_joint
+- right_shoulder_pan_joint
+- left_elbow_joint
+- right_shoulder_lift_joint
+- left_shoulder_lift_joint
+- left_shoulder_pan_joint
+- left_wrist_3_joint
+- left_wrist_2_joint
+- right_wrist_3_joint
+- left_wrist_1_joint
+position:
+- -0.9754013717628411
+- 5.122409585072704
+- -1.0291796672678881
+- 1.1354326136217985
+- -1.0660873482606272
+- -1.0056270487585248
+- -1.151085050217527
+- 1.2007765327448239
+- -0.0016672767393131225
+- 2.053201730217058
+- 0.0017165058869289661
+- -0.9246196640148477
+velocity:
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+effort:
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+--------------------------------------------------------
+
+HANDOVER POSITION RIGHT ARM
+A message was lost!!!
+	total count change:1
+	total count: 1---
+header:
+  stamp:
+    sec: 1766308148
+    nanosec: 40125670
+  frame_id: base_link
+name:
+- right_elbow_joint
+- right_wrist_1_joint
+- right_wrist_2_joint
+- right_shoulder_pan_joint
+- left_elbow_joint
+- right_shoulder_lift_joint
+- left_shoulder_lift_joint
+- left_shoulder_pan_joint
+- left_wrist_3_joint
+- left_wrist_2_joint
+- right_wrist_3_joint
+- left_wrist_1_joint
+position:
+- -0.5899390230337972
+- 4.633197158170174
+- -1.3288094507332389
+- 1.4351903266174788
+- -1.0660873482606272
+- -0.9018566946080824
+- -1.151085050217527
+- 1.2007765327448239
+- -0.0016672767393131225
+- 2.053201730217058
+- 0.0016688410784974658
+- -0.9246196640148477
+velocity:
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+effort:
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+-----------------------------------------------------------
+final position RIGHT ARM
+A message was lost!!!
+	total count change:1
+	total count: 1---
+header:
+  stamp:
+    sec: 1766308351
+    nanosec: 452109743
+  frame_id: base_link
+name:
+- right_elbow_joint
+- right_wrist_1_joint
+- right_wrist_2_joint
+- right_shoulder_pan_joint
+- left_elbow_joint
+- right_shoulder_lift_joint
+- left_shoulder_lift_joint
+- left_shoulder_pan_joint
+- left_wrist_3_joint
+- left_wrist_2_joint
+- right_wrist_3_joint
+- left_wrist_1_joint
+position:
+- -0.380874439699517
+- -1.1446385791019462
+- -1.5758094765850956
+- 3.342225803311809
+- -1.0660873482606272
+- -0.06864160102957538
+- -1.151085050217527
+- 1.2007765327448239
+- -0.0016672767393131225
+- 2.053201730217058
+- 0.21494803179577782
+- -0.9246196640148477
+velocity:
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+effort:
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+---
+
+
+
+
+
+
+
