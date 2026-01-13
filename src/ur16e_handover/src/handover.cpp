@@ -14,8 +14,8 @@
 
 using namespace std::chrono_literals;
 
-static void attach_box_to_link(
-  moveit::planning_interface::PlanningSceneInterface& psi,
+static void attach_box_to_link(       ///change to use attachObject() and detectObject() [prebuilt functions in MoveIt if this doesnt work]
+  moveit::planning_interface::PlanningSceneInterface& psi, 
   const std::string& object_id,
   const std::string& link_name,
   const std::vector<std::string>& touch_links)
@@ -44,10 +44,11 @@ static void detach_box_from_link(
 
 static void sleep_ms(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
 
-static moveit_msgs::msg::CollisionObject makeCubeCollisionObject(
+
+static moveit_msgs::msg::CollisionObject makeCollisionObject(
   const std::string& object_id,
   const std::string& frame_id,
-  double size_xyz,
+  double size_x, double size_y, double size_z,
   double x, double y, double z,
   double qx, double qy, double qz, double qw)
 {
@@ -57,7 +58,7 @@ static moveit_msgs::msg::CollisionObject makeCubeCollisionObject(
 
   shape_msgs::msg::SolidPrimitive prim;
   prim.type = shape_msgs::msg::SolidPrimitive::BOX;
-  prim.dimensions = {size_xyz, size_xyz, size_xyz};
+  prim.dimensions = {size_x, size_y, size_z};
 
   geometry_msgs::msg::Pose pose;
   pose.position.x = x;
@@ -94,6 +95,10 @@ int main(int argc, char** argv)
 {
   rclcpp::init(argc, argv);
   auto node = rclcpp::Node::make_shared("handover_demo");
+  rclcpp::executors::SingleThreadedExecutor exec;
+  exec.add_node(node);
+  std::thread spinner([&exec]() { exec.spin(); });
+  spinner.detach();
 
   // ---- Parameters you likely want to adjust ----
   const std::string left_group_name  = node->declare_parameter<std::string>("left_group", "left_ur16e");
@@ -107,8 +112,9 @@ int main(int argc, char** argv)
   const std::string right_final_named   = node->declare_parameter<std::string>("right_final_named", "right_lower_object_position");
 
   const std::string cube_id = node->declare_parameter<std::string>("cube_id", "handover_cube");
-  const double cube_size    = node->declare_parameter<double>("cube_size", 0.15);  // 15 cm cube
-
+  const double cube_size_x    = node->declare_parameter<double>("cube_size_x", 0.15); 
+  const double cube_size_y    = node->declare_parameter<double>("cube_size_y", 0.15);
+  const double cube_size_z    = node->declare_parameter<double>("cube_size_z", 0.15);
   // Cube pose relative to LEFT end-effector (object starts already in left gripper)
   const double cube_x_left = node->declare_parameter<double>("cube_x", 0.0);
   const double cube_y_left = node->declare_parameter<double>("cube_y", 0.0);
@@ -124,6 +130,19 @@ int main(int argc, char** argv)
   const double cube_qy = node->declare_parameter<double>("cube_qy", 0.0);
   const double cube_qz = node->declare_parameter<double>("cube_qz", 0.0);
   const double cube_qw = node->declare_parameter<double>("cube_qw", 1.0);
+
+  //ground/table size
+  const std::string table_id = node->declare_parameter<std::string>("table_id", "table"); 
+  const double table_size_x    = node->declare_parameter<double>("table_size_x", 0.5); 
+  const double table_size_y    = node->declare_parameter<double>("table_size_y", 1.2);
+  const double table_size_z    = node->declare_parameter<double>("table_size_z", 0.5);
+  const double table_qx = node->declare_parameter<double>("table_qx", 0.0);
+  const double table_qy = node->declare_parameter<double>("table_qy", 0.0);
+  const double table_qz = node->declare_parameter<double>("table_qz", 0.0);
+  const double table_qw = node->declare_parameter<double>("table_qw", 1.0);
+  const double table_x_base = node->declare_parameter<double>("table_x_base", 0.0);
+  const double table_y_base = node->declare_parameter<double>("table_y_base", 0.0);
+  const double table_z_base = node->declare_parameter<double>("table_z_base", -0.25); // half below world frame
 
   // ---- MoveIt interfaces ----
   moveit::planning_interface::PlanningSceneInterface psi;
@@ -141,18 +160,34 @@ int main(int argc, char** argv)
 
   // Clean up any stale object from previous runs
   psi.removeCollisionObjects({cube_id});
+  psi.removeCollisionObjects({table_id});
   detach_box_from_link(psi, cube_id, left_ee_link);
   detach_box_from_link(psi, cube_id, right_ee_link);
 
   sleep_ms(400);
 
+  //adding ground plane
+  const std::string world_frame = left_mgi.getPlanningFrame(); // often "world" or "base_link"
+  sleep_ms(200);
+
+  moveit_msgs::msg::CollisionObject table = 
+    makeCollisionObject(
+      table_id, world_frame,
+      table_size_x, table_size_y, table_size_z,
+      table_x_base, table_y_base, table_z_base, //table positional coordinates
+      table_qx, table_qy, table_qz, table_qw );
+
+  psi.applyCollisionObject(table);
+  sleep_ms(400);
+
   // 0A) Add cube in the world, defined in LEFT EE frame (so it appears "in the gripper")
-  moveit_msgs::msg::CollisionObject cube_world =
-    makeCubeCollisionObject(cube_id, left_ee_link, cube_size,
+  moveit_msgs::msg::CollisionObject cube_left =
+    makeCollisionObject(cube_id, left_ee_link, 
+                            cube_size_x, cube_size_y, cube_size_z,
                             cube_x_left, cube_y_left, cube_z_left,
                             cube_qx, cube_qy, cube_qz, cube_qw);
 
-  psi.applyCollisionObject(cube_world);
+  psi.applyCollisionObject(cube_left);
   sleep_ms(400);
 
   // 0B) Attach cube to LEFT end-effector
@@ -201,7 +236,8 @@ int main(int argc, char** argv)
 
   // Re-add cube, now defined in RIGHT EE frame
   moveit_msgs::msg::CollisionObject cube_right =
-    makeCubeCollisionObject(cube_id, right_ee_link, cube_size,
+    makeCollisionObject(cube_id, right_ee_link,
+                            cube_size_x, cube_size_y, cube_size_z,
                             cube_x_right, cube_y_right, cube_z_right,
                             cube_qx, cube_qy, cube_qz, cube_qw);
 

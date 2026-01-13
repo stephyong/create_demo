@@ -106,12 +106,12 @@
     <disable_collisions link1="right_wrist_1_link" link2="right_wrist_3_link" reason="Never"/>
     <disable_collisions link1="right_wrist_2_link" link2="right_wrist_3_link" reason="Adjacent"/>
     <group_state name="left_receiving_position" group="left_ur16e">
-        <joint name="left_shoulder_pan_joint" value="2.2390672293524303"/>
-        <joint name="left_shoulder_lift_joint" value="0.2683460807141523"/>
-        <joint name="left_elbow_joint" value="-2.3778812969344134"/>//
-        <joint name="left_wrist_1_joint" value="-1.03478938892059"/>
-        <joint name="left_wrist_2_joint" value="-0.5764915930598724"/>
-        <joint name="left_wrist_3_joint" value="0.0022435144298070782"/>
+        <joint name="left_shoulder_pan_joint" value="-0.2518866697894495"/>
+        <joint name="left_shoulder_lift_joint" value="-1.2164602738669892"/>
+        <joint name="left_elbow_joint" value="-2.014770746231079"/>//
+        <joint name="left_wrist_1_joint" value="-3.0570813618102015"/>
+        <joint name="left_wrist_2_joint" value="-2.2569201628314417"/>
+        <joint name="left_wrist_3_joint" value="0.0768733024597168"/>
     </group_state>
     <group_state name="left_handover_position" group="left_ur16e">
         <joint name="left_shoulder_pan_joint" value="1.3595213111017366"/>
@@ -122,12 +122,12 @@
         <joint name="left_wrist_3_joint" value="-0.0014133529189644181"/>
     </group_state>
     <group_state name="right_prehandover_position" group="right_ur16e">
-        <joint name="right_shoulder_pan_joint" value="1.4344732456442577"/>
-        <joint name="right_shoulder_lift_joint" value="-1.0198876996028148"/>
-        <joint name="right_elbow_joint" value="-0.401913249564033"/>//
-        <joint name="right_wrist_1_joint" value="-1.7199289400730953"/>
-        <joint name="right_wrist_2_joint" value="-1.4343178810274206"/>
-        <joint name="right_wrist_3_joint" value="0.0015554579963803637"/>
+        <joint name="right_shoulder_pan_joint" value="-3.2785912195788782"/>
+        <joint name="right_shoulder_lift_joint" value="-1.6929518185057582"/>
+        <joint name="right_elbow_joint" value="2.1487663427936"/>//
+        <joint name="right_wrist_1_joint" value="-2.3819247684874476"/>
+        <joint name="right_wrist_2_joint" value="-2.7175918261157435"/>
+        <joint name="right_wrist_3_joint" value="1.8448426723480225"/>
     </group_state>
     <group_state name="right_lower_object_position" group="right_ur16e">
         <joint name="right_shoulder_pan_joint" value="3.342225803311809"/>
