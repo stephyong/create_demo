@@ -91,6 +91,42 @@ static bool planAndExecute(moveit::planning_interface::MoveGroupInterface& mgi, 
   return true;
 }
 
+static bool planAndExecuteCartesian(
+  moveit::planning_interface::MoveGroupInterface& mgi, 
+  const geometry_msgs::msg::Pose& target_pose,
+  rclcpp::Logger logger,
+  double eef_step = 0.01,  // 1cm resolution
+  double jump_threshold = 0.0)  // disable jump threshold
+{
+  std::vector<geometry_msgs::msg::Pose> waypoints;
+  waypoints.push_back(target_pose);
+  
+  moveit_msgs::msg::RobotTrajectory trajectory;
+  double fraction = mgi.computeCartesianPath(
+    waypoints,
+    eef_step,
+    jump_threshold,
+    trajectory);
+  
+  if (fraction < 0.95) {  // Less than 95% of path achieved
+    RCLCPP_ERROR(logger, "Cartesian path only achieved %.2f%% for group '%s'", 
+                 fraction * 100.0, mgi.getName().c_str());
+    return false;
+  }
+  
+  // Execute the trajectory
+  moveit::planning_interface::MoveGroupInterface::Plan plan;
+  plan.trajectory_ = trajectory;
+  
+  auto ok = (mgi.execute(plan) == moveit::core::MoveItErrorCode::SUCCESS);
+  if (!ok) {
+    RCLCPP_ERROR(logger, "Cartesian execution failed for group '%s'", mgi.getName().c_str());
+    return false;
+  }
+  
+  return true;
+}
+
 int main(int argc, char** argv)
 {
   rclcpp::init(argc, argv);
@@ -197,7 +233,7 @@ int main(int argc, char** argv)
   sleep_ms(400);
 
   RCLCPP_INFO(node->get_logger(), "Cube '%s' attached to %s", cube_id.c_str(), left_ee_link.c_str());
-
+   //initial pose to receive object
   RCLCPP_INFO(node->get_logger(), "Step 1: Move LEFT to named target '%s'", left_take_named.c_str());
   left_mgi.setNamedTarget(left_take_named);
   if (!planAndExecute(left_mgi, node->get_logger())) {
@@ -205,7 +241,7 @@ int main(int argc, char** argv)
     rclcpp::shutdown();
     return 1;
   }
-  // 1) Move LEFT up to handover/present pose (named state from SRDF)
+  // 1) Move LEFT up high to handover/present pose (named state from SRDF)
   RCLCPP_INFO(node->get_logger(), "Step 1a: Move LEFT to named target '%s'", left_present_named.c_str());
   left_mgi.setNamedTarget(left_present_named);
   if (!planAndExecute(left_mgi, node->get_logger())) {
@@ -214,11 +250,41 @@ int main(int argc, char** argv)
     return 1;
   }
 
-  // 2) Move RIGHT to receive-ready pose
+  // 2) Move RIGHT up high to receive-ready pose
   RCLCPP_INFO(node->get_logger(), "Step 2: Move RIGHT to named target '%s'", right_receive_named.c_str());
   right_mgi.setNamedTarget(right_receive_named);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     RCLCPP_ERROR(node->get_logger(), "Failed at Step 2");
+    rclcpp::shutdown();
+    return 1;
+  }
+
+  RCLCPP_INFO(node->get_logger(), "Step 1b: Cartesian approach to final handover position");
+
+// Start from current EEF pose (after Step 1a)
+  geometry_msgs::msg::Pose left_handover_pose = left_mgi.getCurrentPose(left_ee_link).pose;
+
+  // Example: move 2 cm along y in the pose reference frame (often base_link)
+  left_handover_pose.position.y += 0.08;
+
+  // Execute straight-line Cartesian move
+  if (!planAndExecuteCartesian(left_mgi, left_handover_pose, node->get_logger())) {
+    RCLCPP_ERROR(node->get_logger(), "Failed Cartesian approach for LEFT");
+    rclcpp::shutdown();
+    return 1;
+  }
+
+  RCLCPP_INFO(node->get_logger(), "Step 1b: Cartesian approach to final handover position");
+
+// Start from current EEF pose (after Step 1a)
+  geometry_msgs::msg::Pose right_handover_pose = right_mgi.getCurrentPose(right_ee_link).pose;
+
+  // Example: move 2 cm along Z in the pose reference frame (often base_link)
+  right_handover_pose.position.y -= 0.08;
+
+  // Execute straight-line Cartesian move
+  if (!planAndExecuteCartesian(right_mgi, right_handover_pose, node->get_logger())) {
+    RCLCPP_ERROR(node->get_logger(), "Failed Cartesian approach for RIGHT");
     rclcpp::shutdown();
     return 1;
   }
