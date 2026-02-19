@@ -14,6 +14,9 @@
   <depend>tf2_ros</depend>
   <depend>shape_msgs</depend>
   <depend>moveit_ros_planning_interface</depend>
+  <depend>ur_msgs</depend>           <!-- ADDITION 1 -->
+  <depend>eigen</depend> 
+
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
