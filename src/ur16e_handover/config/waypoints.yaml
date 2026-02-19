@@ -1,4 +1,4 @@
-handover_demo:
+handover:
   ros__parameters:
     # Left arm poses (position in metres, orientation in rad from pendant)
     left_waypoint3_x:  -0.41918

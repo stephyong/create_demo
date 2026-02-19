@@ -132,9 +132,9 @@ static geometry_msgs::msg::Pose poseFromURPendant(
   double x, double y, double z,
   double rx_deg, double ry_deg, double rz_deg)
 {
-  double rx = rx_deg * M_PI / 180.0;
-  double ry = ry_deg * M_PI / 180.0;
-  double rz = rz_deg * M_PI / 180.0;
+  double rx = rx_deg ;
+  double ry = ry_deg ;
+  double rz = rz_deg ;
 
   Eigen::AngleAxisd roll (rx, Eigen::Vector3d::UnitX());
   Eigen::AngleAxisd pitch(ry, Eigen::Vector3d::UnitY());
@@ -200,18 +200,18 @@ int main(int argc, char** argv)
   spinner.detach();
 
   // ---- Group and link names ----
-  const std::string left_group_name  = node->declare_parameter<std::string>("left_group",    "left_ur16e");
-  const std::string right_group_name = node->declare_parameter<std::string>("right_group",   "right_ur16e");
-  const std::string left_ee_link     = node->declare_parameter<std::string>("left_ee_link",  "left_tool0");
+  const std::string left_group_name  = node->declare_parameter<std::string>("left_group", "left_ur16e");
+  const std::string right_group_name = node->declare_parameter<std::string>("right_group", "right_ur16e");
+  const std::string left_ee_link     = node->declare_parameter<std::string>("left_ee_link", "left_tool0");
   const std::string right_ee_link    = node->declare_parameter<std::string>("right_ee_link", "right_tool0");
 
   // ---- Named states from SRDF (joint-space moves) ----
-  const std::string left_take_named        = node->declare_parameter<std::string>("left_take_named",        "left_receiving_position");
-  const std::string left_present_named     = node->declare_parameter<std::string>("left_present_named",     "left_handover_position");
-  const std::string right_handover_named   = node->declare_parameter<std::string>("right_handover_named",   "right_prehandover_position");
+  const std::string left_take_named        = node->declare_parameter<std::string>("left_take_named","left_receiving_position");
+  const std::string left_present_named     = node->declare_parameter<std::string>("left_present_named","left_handover_position");
+  const std::string right_handover_named   = node->declare_parameter<std::string>("right_handover_named","right_prehandover_position");
   const std::string right_handover_named_2 = node->declare_parameter<std::string>("right_handover_named_2", "right_prehandover_position_2");
   const std::string right_handover_named_3 = node->declare_parameter<std::string>("right_handover_named_3", "right_prehandover_position_3");
-  const std::string right_final_named      = node->declare_parameter<std::string>("right_final_named",      "right_lower_object_position");
+  const std::string right_final_named      = node->declare_parameter<std::string>("right_final_named", "right_lower_object_position");
 
   // ---- Cartesian waypoint count ----
   const int cartesian_waypoints = node->declare_parameter<int>("cartesian_waypoints", 10);

@@ -18,7 +18,7 @@ def generate_launch_description():
 
     handover_node = Node(
         package="ur16e_handover",
-        executable="handover",
+        executable="handover", #node name 
         output="screen",
         parameters=[params_file]                                       
     )
