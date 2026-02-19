@@ -3,75 +3,142 @@
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 
-#include <moveit_msgs/msg/collision_object.hpp>
-#include <moveit_msgs/msg/attached_collision_object.hpp>
-
-#include <shape_msgs/msg/solid_primitive.hpp>
 #include <geometry_msgs/msg/pose.hpp>
-
-#include <Eigen/Geometry>
 #include "ur_msgs/srv/set_io.hpp"
 
+#include <Eigen/Geometry>
 #include <thread>
 #include <chrono>
 #include <future>
 
 using namespace std::chrono_literals;
 
-static void sleep_ms(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
+// ============================================================
+// Helpers
+// ============================================================
 
+static void sleep_ms(int ms)
+{
+  std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+}
 
-static bool planAndExecute(moveit::planning_interface::MoveGroupInterface& mgi, rclcpp::Logger logger)
+static bool planAndExecute(
+  moveit::planning_interface::MoveGroupInterface& mgi,
+  rclcpp::Logger logger)
 {
   moveit::planning_interface::MoveGroupInterface::Plan plan;
-  auto ok = (mgi.plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
-  if (!ok) {
+  if (mgi.plan(plan) != moveit::core::MoveItErrorCode::SUCCESS) {
     RCLCPP_ERROR(logger, "Planning failed for group '%s'", mgi.getName().c_str());
     return false;
   }
-  ok = (mgi.execute(plan) == moveit::core::MoveItErrorCode::SUCCESS);
-  if (!ok) {
+  if (mgi.execute(plan) != moveit::core::MoveItErrorCode::SUCCESS) {
     RCLCPP_ERROR(logger, "Execution failed for group '%s'", mgi.getName().c_str());
     return false;
   }
   return true;
 }
 
-static bool planAndExecuteCartesian(
-  moveit::planning_interface::MoveGroupInterface& mgi, 
-  const geometry_msgs::msg::Pose& target_pose,
+// Moves the end-effector in a straight line through a series of evenly-spaced
+// waypoints between start_pose and end_pose.
+//
+// Inputs:
+//   mgi            : the arm to move
+//   start_pose     : where to begin the Cartesian path (usually current EEF pose)
+//   end_pose       : the final target pose
+//   num_waypoints  : how many intermediate points to interpolate (more = smoother)
+//   logger         : for error logging
+//   eef_step       : resolution of each step along the path in metres
+//   jump_threshold : 0.0 disables joint-space jump checking
+//
+// Returns true if path was fully planned and executed, false otherwise.
+
+static bool planAndExecuteCartesianBetween(
+  moveit::planning_interface::MoveGroupInterface& mgi,
+  const geometry_msgs::msg::Pose& start_pose,
+  const geometry_msgs::msg::Pose& end_pose,
+  int num_waypoints,
   rclcpp::Logger logger,
-  double eef_step = 0.01,  // 1cm resolution
-  double jump_threshold = 0.0)  // disable jump threshold
+  double eef_step = 0.01,
+  double jump_threshold = 0.0)
 {
   std::vector<geometry_msgs::msg::Pose> waypoints;
-  waypoints.push_back(target_pose);
-  
-  moveit_msgs::msg::RobotTrajectory trajectory;
-  double fraction = mgi.computeCartesianPath(
-    waypoints,
-    eef_step,
-    jump_threshold,
-    trajectory);
-  
-  if (fraction < 0.95) {  // Less than 95% of path achieved
-    RCLCPP_ERROR(logger, "Cartesian path only achieved %.2f%% for group '%s'", 
-                 fraction * 100.0, mgi.getName().c_str());
-    return false;
+
+  // Always include the start pose as the first waypoint
+  waypoints.push_back(start_pose);
+
+  // Extract start and end as Eigen objects for interpolation
+  Eigen::Vector3d p_start(
+    start_pose.position.x,
+    start_pose.position.y,
+    start_pose.position.z);
+  Eigen::Vector3d p_end(
+    end_pose.position.x,
+    end_pose.position.y,
+    end_pose.position.z);
+
+  Eigen::Quaterniond q_start(
+    start_pose.orientation.w,
+    start_pose.orientation.x,
+    start_pose.orientation.y,
+    start_pose.orientation.z);
+  Eigen::Quaterniond q_end(
+    end_pose.orientation.w,
+    end_pose.orientation.x,
+    end_pose.orientation.y,
+    end_pose.orientation.z);
+  q_start.normalize();
+  q_end.normalize();
+
+  // Generate intermediate waypoints by interpolating between start and end.
+  // t goes from 0 to 1 across num_waypoints steps.
+  // Position is linearly interpolated (lerp).
+  // Orientation is spherically interpolated (slerp) — smoothly rotates
+  // between the two quaternions rather than jumping.
+  for (int i = 1; i <= num_waypoints; ++i) {
+    double t = static_cast<double>(i) / static_cast<double>(num_waypoints);
+
+    Eigen::Vector3d p_interp    = (1.0 - t) * p_start + t * p_end;  // lerp
+    Eigen::Quaterniond q_interp = q_start.slerp(t, q_end);           // slerp
+
+    geometry_msgs::msg::Pose wp;
+    wp.position.x    = p_interp.x();
+    wp.position.y    = p_interp.y();
+    wp.position.z    = p_interp.z();
+    wp.orientation.w = q_interp.w();
+    wp.orientation.x = q_interp.x();
+    wp.orientation.y = q_interp.y();
+    wp.orientation.z = q_interp.z();
+
+    waypoints.push_back(wp);
   }
-  
-  // Execute the trajectory
-  moveit::planning_interface::MoveGroupInterface::Plan plan;
-  plan.trajectory_ = trajectory;
-  
-  if (mgi.execute(plan) != moveit::core::MoveItErrorCode::SUCCESS) {
-    RCLCPP_ERROR(logger, "Cartesian execution failed for '%s'", mgi.getName().c_str());
-    return false;
-  }
-  return true;
+
+  // Plan the Cartesian path through all waypoints
+  static geometry_msgs::msg::Pose poseFromURPendant(
+  double x, double y, double z,
+  double rx_deg, double ry_deg, double rz_deg)
+{
+  double rx = rx_deg * M_PI / 180.0;
+  double ry = ry_deg * M_PI / 180.0;
+  double rz = rz_deg * M_PI / 180.0;
+
+  Eigen::AngleAxisd roll (rx, Eigen::Vector3d::UnitX());
+  Eigen::AngleAxisd pitch(ry, Eigen::Vector3d::UnitY());
+  Eigen::AngleAxisd yaw  (rz, Eigen::Vector3d::UnitZ());
+  Eigen::Quaterniond q = yaw * pitch * roll;
+  q.normalize();
+
+  geometry_msgs::msg::Pose pose;
+  pose.position.x    = x;
+  pose.position.y    = y;
+  pose.position.z    = z;
+  pose.orientation.w = q.w();
+  pose.orientation.x = q.x();
+  pose.orientation.y = q.y();
+  pose.orientation.z = q.z();
+  return pose;
 }
 
-static bool set_gripper( //true means close gripper, false = open gripper
+static bool set_gripper(
   rclcpp::Node::SharedPtr node,
   rclcpp::Client<ur_msgs::srv::SetIO>::SharedPtr client,
   uint8_t pin,
@@ -99,70 +166,36 @@ static bool set_gripper( //true means close gripper, false = open gripper
   return true;
 }
 
-//blind approach
-static geometry_msgs::msg::Pose computeApproachPose(
-  const geometry_msgs::msg::Pose& grasp_pose,
+// Offset a pose along its own tool +Y axis by `distance` metres.
+// Used to compute the Cartesian approach: step back from the grasp point
+// along the gripper's own Y axis, then move straight in.
+static geometry_msgs::msg::Pose offsetAlongToolY(
+  const geometry_msgs::msg::Pose& pose,
   double distance)
 {
-  geometry_msgs::msg::Pose approach = grasp_pose;
+  geometry_msgs::msg::Pose result = pose;
 
-  // Extract orientation as Eigen quaternion
   Eigen::Quaterniond q(
-    grasp_pose.orientation.w,
-    grasp_pose.orientation.x,
-    grasp_pose.orientation.y,
-    grasp_pose.orientation.z);
+    pose.orientation.w,
+    pose.orientation.x,
+    pose.orientation.y,
+    pose.orientation.z);
   q.normalize();
 
-  // Rotate the unit Z vector into world frame — gives us the tool's approach direction
-  Eigen::Vector3d z_axis = q * Eigen::Vector3d::UnitZ();
+  Eigen::Vector3d y_world = q * Eigen::Vector3d::UnitY();
+  Eigen::Vector3d p(pose.position.x, pose.position.y, pose.position.z);
+  Eigen::Vector3d p_offset = p + distance * y_world;
 
-  Eigen::Vector3d p(
-    grasp_pose.position.x,
-    grasp_pose.position.y,
-    grasp_pose.position.z);
-
-  // Step back along tool Z
-  Eigen::Vector3d p_approach = p - distance * z_axis;
-
-  approach.position.x = p_approach.x();
-  approach.position.y = p_approach.y();
-  approach.position.z = p_approach.z();
-
-  return approach;
+  result.position.x = p_offset.x();
+  result.position.y = p_offset.y();
+  result.position.z = p_offset.z();
+  return result;
 }
 
 
-static geometry_msgs::msg::Pose computeRightGraspFromLeft(
-  const geometry_msgs::msg::Pose& left_pose,
-  double y_offset)      // positive = shift in world +Y
-{
-  geometry_msgs::msg::Pose right_grasp = left_pose;
-
-  // Rotate orientation 180 degrees about world Z so grippers face each other
-  Eigen::Quaterniond q_left(
-    left_pose.orientation.w,
-    left_pose.orientation.x,
-    left_pose.orientation.y,
-    left_pose.orientation.z);
-  q_left.normalize();
-
-  Eigen::AngleAxisd flip(M_PI, Eigen::Vector3d::UnitZ());
-  Eigen::Quaterniond q_right = q_left * Eigen::Quaterniond(flip);
-  q_right.normalize();
-
-  right_grasp.orientation.w = q_right.w();
-  right_grasp.orientation.x = q_right.x();
-  right_grasp.orientation.y = q_right.y();
-  right_grasp.orientation.z = q_right.z();
-
-  // Apply lateral offset so right gripper targets the object, not left_tool0 itself
-  right_grasp.position.y += y_offset;
-
-  return right_grasp;
-}
-
-
+// ============================================================
+// Main
+// ============================================================
 
 int main(int argc, char** argv)
 {
@@ -173,106 +206,161 @@ int main(int argc, char** argv)
   std::thread spinner([&exec]() { exec.spin(); });
   spinner.detach();
 
-  // ---- Parameters you likely want to adjust ----
-  const std::string left_group_name  = node->declare_parameter<std::string>("left_group", "left_ur16e");
-  const std::string right_group_name = node->declare_parameter<std::string>("right_group", "right_ur16e");
+  // ---- Parameters ----
+  const std::string left_group_name   = node->declare_parameter<std::string>("left_group",   "left_ur16e");
+  const std::string right_group_name  = node->declare_parameter<std::string>("right_group",  "right_ur16e");
+  const std::string left_ee_link      = node->declare_parameter<std::string>("left_ee_link",  "left_tool0");
+  const std::string right_ee_link     = node->declare_parameter<std::string>("right_ee_link", "right_tool0");
 
-  const std::string left_ee_link  = node->declare_parameter<std::string>("left_ee_link", "left_tool0");
-  const std::string right_ee_link = node->declare_parameter<std::string>("right_ee_link", "right_tool0");
-  const std::string left_take_named  = node->declare_parameter<std::string>("left_take_named", "left_receiving_position");
-  const std::string left_present_named  = node->declare_parameter<std::string>("left_present_named", "left_handover_position");
-  const std::string right_receive_named = node->declare_parameter<std::string>("right_receive_named", "right_prehandover_position");
-  const std::string right_final_named   = node->declare_parameter<std::string>("right_final_named", "right_lower_object_position");
-  const uint8_t left_gripper_pin  = static_cast<uint8_t>(node->declare_parameter<int>("left_gripper_pin", 13));
-  const uint8_t right_gripper_pin = static_cast<uint8_t>(node->declare_parameter<int>("right_gripper_pin", 1));
-  const double approach_distance  = node->declare_parameter<double>("approach_distance", 0.05); //right gripper starts 5cm behind grasp point 
-  const double right_y_offset     = node->declare_parameter<double>("right_y_offset",    0.15);//position of right gripper relative to left
-  auto left_io = node->create_client<ur_msgs::srv::SetIO>("left gripper and status");
-  auto right_io = node->create_client<ur_msgs::srv::SetIO>("right gripper and status");
+  // Named states defined in your SRDF
+  const std::string left_take_named      = node->declare_parameter<std::string>("left_take_named", "left_receiving_position");
+  const std::string left_present_named   = node->declare_parameter<std::string>("left_present_named","left_handover_position");
+  const std::string left_after_named      = node->declare_parameter<std::string>("left_after_named", "left_posthandover_position");
+  const std::string left_after_named2   = node->declare_parameter<std::string>("left_after_named2", "left_posthandover_position2");
+  
+  
+  const std::string right_handover_named = node->declare_parameter<std::string>("right_handover_named", "right_prehandover_position");
+  const std::string right_handover_named_2 = node->declare_parameter<std::string>("right_handover_named_2", "right_prehandover_position_2");
+  const std::string right_handover_named_3 = node->declare_parameter<std::string>("right_handover_named_3", "right_prehandover_position_3");
+  const std::string right_handover = node->declare_parameter<std::string>("right_handover","right_handover_position");
+  const std::string right_posthandover = node->declare_parameter<std::string>("right_posthandover", "right_posthandover_position");
+  const std::string right_final_named    = node->declare_parameter<std::string>("right_final_named", "right_lower_object_position");
+
+
+
+
+  const int cartesian_waypoints = node->declare_parameter<int>("cartesian_waypoints", 10);
+  geometry_msgs::msg::Pose left_waypoint3 = poseFromURPendant(
+    node->declare_parameter<double>("left_waypoint3_x",  0.0),
+    node->declare_parameter<double>("left_waypoint3_y",  0.0),
+    node->declare_parameter<double>("left_waypoint3_z",  0.0),
+    node->declare_parameter<double>("left_waypoint3_rx", 0.0),
+    node->declare_parameter<double>("left_waypoint3_ry", 0.0),
+    node->declare_parameter<double>("left_waypoint3_rz", 0.0));
+
+
+
+
+  // Gripper IO pins — match your UR controller wiring
+  const uint8_t left_gripper_pin  = static_cast<uint8_t>(node->declare_parameter<int>("left_gripper_pin",  13));
+  const uint8_t right_gripper_pin = static_cast<uint8_t>(node->declare_parameter<int>("right_gripper_pin", 12));
+
+
+
+  // ---- IO clients ----
+  auto left_io  = node->create_client<ur_msgs::srv::SetIO>("left_io_and_status_controller/set_io");
+  auto right_io = node->create_client<ur_msgs::srv::SetIO>("right_io_and_status_controller/set_io");
 
   // ---- MoveIt interfaces ----
-  moveit::planning_interface::PlanningSceneInterface psi;
-  moveit::planning_interface::MoveGroupInterface left_mgi(node, left_group_name);
+  moveit::planning_interface::MoveGroupInterface left_mgi(node,  left_group_name);
   moveit::planning_interface::MoveGroupInterface right_mgi(node, right_group_name);
 
-  // Optional: make planning more forgiving while prototyping
-  left_mgi.setPlanningTime(5.0);
-  right_mgi.setPlanningTime(5.0);
+  left_mgi.setPlanningTime(15.0);
+  right_mgi.setPlanningTime(15.0);
+  left_mgi.allowReplanning(true);
+  right_mgi.allowReplanning(true);
+
   sleep_ms(800);
 
-  RCLCPP_INFO(node->get_logger(), "LEFT receives from human");
-
-
-   //initial pose to receive object
-  RCLCPP_INFO(node->get_logger(), "Step 1: Move LEFT to named target '%s'", left_take_named.c_str());
+  // ============================================================
+  // Step 1: Left arm moves to receiving position (from human)
+  // ============================================================
+  RCLCPP_INFO(node->get_logger(), "Step 1: LEFT -> receiving position");
   left_mgi.setNamedTarget(left_take_named);
   if (!planAndExecute(left_mgi, node->get_logger())) {
-    RCLCPP_ERROR(node->get_logger(), "Failed at Step 1a");
-    rclcpp::shutdown();
-    return 1;
+    RCLCPP_ERROR(node->get_logger(), "Failed Step 1"); rclcpp::shutdown(); return 1;
   }
-  // 1) Move LEFT up high to handover/present pose (named state from SRDF)
-  RCLCPP_INFO(node->get_logger(), "Step 2: Move LEFT to named target '%s'", left_present_named.c_str());
+
+  // ============================================================
+  // Step 2: Left arm moves to handover position (presents object)
+  // ============================================================
+  RCLCPP_INFO(node->get_logger(), "Step 2: LEFT -> handover position");
   left_mgi.setNamedTarget(left_present_named);
   if (!planAndExecute(left_mgi, node->get_logger())) {
-    RCLCPP_ERROR(node->get_logger(), "Failed at Step 2");
-    rclcpp::shutdown();
-    return 1;
+    RCLCPP_ERROR(node->get_logger(), "Failed Step 2"); rclcpp::shutdown(); return 1;
   }
 
-  // 2) Move RIGHT up high to receive-ready pose
-  RCLCPP_INFO(node->get_logger(), "Step 3: Move RIGHT to named target '%s'", right_receive_named.c_str());
-  right_mgi.setNamedTarget(right_receive_named);
+  // ============================================================
+  // Step 3: Right arm moves to hardcoded handover position.
+  // This named state is defined in your SRDF and positions right
+  // gripper facing left gripper, offset along Y by the distance
+  // you measured, with the correct orientation already set.
+  // ============================================================
+  RCLCPP_INFO(node->get_logger(), "Step 3: RIGHT -> handover position");
+  right_mgi.setNamedTarget(right_handover_named);
   if (!planAndExecute(right_mgi, node->get_logger())) {
-    RCLCPP_ERROR(node->get_logger(), "Failed at Step 3");
-    rclcpp::shutdown();
-    return 1;
+    RCLCPP_ERROR(node->get_logger(), "Failed Step 3"); rclcpp::shutdown(); return 1;
+  }
+  right_mgi.setNamedTarget(right_handover_named_2);
+  if (!planAndExecute(right_mgi, node->get_logger())) {
+    RCLCPP_ERROR(node->get_logger(), "Failed Step 3a"); rclcpp::shutdown(); return 1;
+  }
+  right_mgi.setNamedTarget(right_handover_named_3);
+  if (!planAndExecute(right_mgi, node->get_logger())) {
+    RCLCPP_ERROR(node->get_logger(), "Failed Step 3b"); rclcpp::shutdown(); return 1;
+  }
+  right_mgi.setNamedTarget(right_handover);
+  if (!planAndExecuteCartesian(right_mgi, node->get_logger())) {
+    RCLCPP_ERROR(node->get_logger(), "Failed Step 3c"); rclcpp::shutdown(); return 1;
   }
 
-  RCLCPP_INFO(node->get_logger(), "Step 4: computing right grasp from left tool");
+  // ============================================================
+  // Step 5: Cartesian approach — move 4cm along right tool +Y.
+  // Right gripper is now at the hardcoded handover position.
+  // We offset from its current pose along its own Y axis to
+  // compute the grasp target, then move there in a straight line.
+  // ============================================================
+  RCLCPP_INFO(node->get_logger(), "Step 5: RIGHT Cartesian approach (%.0f mm along tool Y)",
+              cartesian_approach_distance * 1000.0);
 
-  geometry_msgs::msg::Pose left_handover_pose = left_mgi.getCurrentPose(left_ee_link).pose;
-  geometry_msgs::msg:: Pose right_grasp_pose = computeRightGraspFromLeft(left_current_pose, right_y_offset);
-  geometry_msgs::msg::Pose right_approach_pose = computeApproachPose(right_grasp_pose, approach_distance);
+  geometry_msgs::msg::Pose right_current = right_mgi.getCurrentPose(right_ee_link).pose;
+  geometry_msgs::msg::Pose right_grasp   = offsetAlongToolY(right_current, cartesian_approach_distance);
 
-  RCLCPP_INFO(node->get_logger(),"Step 5: right gripper moving to approach pose")
-  if (!planAndExecuteCartesian(right_mgi, right_approach_pose, node->get_logger())) {
+  RCLCPP_INFO(node->get_logger(),
+    "Grasp target: x=%.3f y=%.3f z=%.3f",
+    right_grasp.position.x, right_grasp.position.y, right_grasp.position.z);
+
+  if (!planAndExecuteCartesian(right_mgi, right_grasp, node->get_logger())) {
     RCLCPP_ERROR(node->get_logger(), "Failed Step 5"); rclcpp::shutdown(); return 1;
   }
 
-  //right gripper clamps, left gripper still on 
-
-  RCLCPP_INFO(node->get_logger(),"Step 6: right gripper opens");
-  set_gripper(node, right_io_client, right_gripper_pin, false,  "right");  // right opens
+  // ============================================================
+  // Step 6: Right gripper closes (grips object)
+  // ============================================================
+  RCLCPP_INFO(node->get_logger(), "Step 6: Closing right gripper");
+  if (!set_gripper(node, right_io, right_gripper_pin, true, "right")) {
+    RCLCPP_ERROR(node->get_logger(), "Failed Step 6"); rclcpp::shutdown(); return 1;
+  }
   sleep_ms(500);
 
-  RCLCPP_INFO(node->get_logger(),"Step 7: right gripper moving to grab object")
-  if (!planAndExecuteCartesian(right_mgi, right_grasp_pose, node->get_logger())) {
+  // ============================================================
+  // Step 7: Left gripper releases object
+  // ============================================================
+  RCLCPP_INFO(node->get_logger(), "Step 7: Opening left gripper");
+  if (!set_gripper(node, left_io, left_gripper_pin, false, "left")) {
     RCLCPP_ERROR(node->get_logger(), "Failed Step 7"); rclcpp::shutdown(); return 1;
   }
-  RCLCPP_INFO(node->get_logger(),"Step 8: right gripper closes");
-  set_gripper(node, right_io_client, right_gripper_pin, true,  "right");  // right closes
   sleep_ms(500);
 
-  RCLCPP_INFO(node->get_logger(),"Step 9: left gripper opens");
-  set_gripper(node, left_io_client, left_gripper_pin, false,  "left");  // left opens
-  sleep_ms(500);
-
-//C05 is pin 13 
-
-  // 4) Move RIGHT to final placement pose
-  RCLCPP_INFO(node->get_logger(), "Step 10: Move RIGHT to final position '%s'", right_final_named.c_str());
+  // ============================================================
+  // Step 8: Right arm moves to final placement position
+  // ============================================================
+  RCLCPP_INFO(node->get_logger(), "Step 8: RIGHT -> final placement position");
   right_mgi.setNamedTarget(right_final_named);
   if (!planAndExecute(right_mgi, node->get_logger())) {
-    RCLCPP_ERROR(node->get_logger(), "Failed at Step 10");
-    rclcpp::shutdown(); return 1;
+    RCLCPP_ERROR(node->get_logger(), "Failed Step 8"); rclcpp::shutdown(); return 1;
   }
 
-  RCLCPP_INFO(node->get_logger(),"Step 11: right gripper releases object");
-  set_gripper(node, right_io_client, right_gripper_pin, false,  "right");  // right opens
+  // ============================================================
+  // Step 9: Right gripper releases object into box
+  // ============================================================
+  RCLCPP_INFO(node->get_logger(), "Step 9: Opening right gripper — releasing into box");
+  if (!set_gripper(node, right_io, right_gripper_pin, false, "right")) {
+    RCLCPP_ERROR(node->get_logger(), "Failed Step 9"); rclcpp::shutdown(); return 1;
+  }
   sleep_ms(500);
 
-  RCLCPP_INFO(node->get_logger(), "Handover demo complete.");
+  RCLCPP_INFO(node->get_logger(), "Handover complete.");
   rclcpp::shutdown();
   return 0;
 }

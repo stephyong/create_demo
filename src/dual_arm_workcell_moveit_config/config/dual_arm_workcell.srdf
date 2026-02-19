@@ -105,6 +105,8 @@
     <disable_collisions link1="right_wrist_1_link" link2="right_wrist_2_link" reason="Adjacent"/>
     <disable_collisions link1="right_wrist_1_link" link2="right_wrist_3_link" reason="Never"/>
     <disable_collisions link1="right_wrist_2_link" link2="right_wrist_3_link" reason="Adjacent"/>
+
+    
     <group_state name="left_receiving_position" group="left_ur16e">
         <joint name="left_shoulder_pan_joint" value="-0.2518866697894495"/>
         <joint name="left_shoulder_lift_joint" value="-1.2164602738669892"/>
@@ -114,27 +116,83 @@
         <joint name="left_wrist_3_joint" value="0.0768733024597168"/>
     </group_state>
     <group_state name="left_handover_position" group="left_ur16e">
-        <joint name="left_shoulder_pan_joint" value="1.3595213111017366"/>
-        <joint name="left_shoulder_lift_joint" value="-1.1189853708962545"/>
-        <joint name="left_elbow_joint" value="-0.8602044775941359"/>//
-        <joint name="left_wrist_1_joint" value="-1.162624585273343"/>
-        <joint name="left_wrist_2_joint" value="1.8391169754061272"/>
-        <joint name="left_wrist_3_joint" value="-0.0014133529189644181"/>
+        <joint name="left_shoulder_pan_joint" value="31.00"/>
+        <joint name="left_shoulder_lift_joint" value="-97.88"/>
+        <joint name="left_elbow_joint" value="-88.44"/>//
+        <joint name="left_wrist_1_joint" value="-169.36"/>
+        <joint name="left_wrist_2_joint" value="-143.46"/>
+        <joint name="left_wrist_3_joint" value="5.40"/>
     </group_state>
     <group_state name="right_prehandover_position" group="right_ur16e">
-        <joint name="right_shoulder_pan_joint" value="-3.2785912195788782"/>
-        <joint name="right_shoulder_lift_joint" value="-1.6929518185057582"/>
-        <joint name="right_elbow_joint" value="2.1487663427936"/>//
-        <joint name="right_wrist_1_joint" value="-2.3819247684874476"/>
-        <joint name="right_wrist_2_joint" value="-2.7175918261157435"/>
-        <joint name="right_wrist_3_joint" value="1.8448426723480225"/>
+        <joint name="right_shoulder_pan_joint" value="-187.85"/>
+        <joint name="right_shoulder_lift_joint" value="-97.00"/>
+        <joint name="right_elbow_joint" value="123.12"/>//
+        <joint name="right_wrist_1_joint" value="-136.47"/>
+        <joint name="right_wrist_2_joint" value="-155.70"/>
+        <joint name="right_wrist_3_joint" value="105.70"/>
     </group_state>
+
+    <group_state name="right_prehandover_position_2" group="right_ur16e">
+        <joint name="right_shoulder_pan_joint" value="-183.87"/>
+        <joint name="right_shoulder_lift_joint" value="-97.00"/>
+        <joint name="right_elbow_joint" value="127.61"/>//
+        <joint name="right_wrist_1_joint" value="-30.01"/>
+        <joint name="right_wrist_2_joint" value="-261.31"/>
+        <joint name="right_wrist_3_joint" value="185.68"/>
+    </group_state>
+
+    <group_state name="right_prehandover_position_3" group="right_ur16e">
+        <joint name="right_shoulder_pan_joint" value="-192.94"/>
+        <joint name="right_shoulder_lift_joint" value="-75.43"/>
+        <joint name="right_elbow_joint" value="78.74"/>//
+        <joint name="right_wrist_1_joint" value="0.03"/>
+        <joint name="right_wrist_2_joint" value="-193.30"/>
+        <joint name="right_wrist_3_joint" value="188.73"/>
+    </group_state>
+
+    <group_state name="right_handover_position" group="right_ur16e">
+        <joint name="right_shoulder_pan_joint" value="-208.49"/>
+        <joint name="right_shoulder_lift_joint" value="-74.72"/>
+        <joint name="right_elbow_joint" value="77.75"/>//
+        <joint name="right_wrist_1_joint" value="-1.48"/>
+        <joint name="right_wrist_2_joint" value="-208.83"/>
+        <joint name="right_wrist_3_joint" value="186.89"/>
+    </group_state>
+
+    <group_state name="left_posthandover_position" group="left_ur16e"> 
+        <joint name="left_shoulder_pan_joint" value="27.83"/>
+        <joint name="left_shoulder_lift_joint" value="-71.42"/>
+        <joint name="left_elbow_joint" value="-111.63"/>//
+        <joint name="left_wrist_1_joint" value="-173.34"/>
+        <joint name="left_wrist_2_joint" value="-134.98"/>
+        <joint name="left_wrist_3_joint" value="4.53"/>
+    </group_state>
+
+    <group_state name="left_posthandover_position_2" group="left_ur16e"> 
+        <joint name="left_shoulder_pan_joint" value="-14.44"/>
+        <joint name="left_shoulder_lift_joint" value="-69.69"/>
+        <joint name="left_elbow_joint" value="-115.44"/>//
+        <joint name="left_wrist_1_joint" value="-175.16"/>
+        <joint name="left_wrist_2_joint" value="-129.31"/>
+        <joint name="left_wrist_3_joint" value="4.41"/>
+    </group_state>
+    
+    <group_state name="right_posthandover_position" group="right_ur16e">
+        <joint name="right_shoulder_pan_joint" value="-192.94"/>
+        <joint name="right_shoulder_lift_joint" value="-75.43"/>
+        <joint name="right_elbow_joint" value="78.74"/>//
+        <joint name="right_wrist_1_joint" value="0.03"/>
+        <joint name="right_wrist_2_joint" value="-193.30"/>
+        <joint name="right_wrist_3_joint" value="188.73"/>
+    </group_state>
+
     <group_state name="right_lower_object_position" group="right_ur16e">
-        <joint name="right_shoulder_pan_joint" value="3.342225803311809"/>
-        <joint name="right_shoulder_lift_joint" value="-0.06864160102957538"/>
-        <joint name="right_elbow_joint" value="-0.380874439699517"/>//
-        <joint name="right_wrist_1_joint" value="-1.1446385791019462"/>
-        <joint name="right_wrist_2_joint" value="-1.5758094765850956"/>
-        <joint name="right_wrist_3_joint" value="0.21494803179577782"/>
+        <joint name="right_shoulder_pan_joint" value="-188.05"/>
+        <joint name="right_shoulder_lift_joint" value="-58.42"/>
+        <joint name="right_elbow_joint" value="66.62"/>//
+        <joint name="right_wrist_1_joint" value="72.82"/>
+        <joint name="right_wrist_2_joint" value="-268.67"/>
+        <joint name="right_wrist_3_joint" value="205.52"/>
     </group_state>
 </robot>
+

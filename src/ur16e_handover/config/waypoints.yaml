@@ -1,0 +1,37 @@
+handover_demo:
+  ros__parameters:
+    # Left arm poses (position in metres, orientation in rad from pendant)
+    left_waypoint3_x:  -0.41918
+    left_waypoint3_y:  0.08981
+    left_waypoint3_z:  0.1084
+    left_waypoint3_rx: 3.392
+    left_waypoint3_ry: -1.970
+    left_waypoint3_rz: 1.992
+
+    left_waypoint4_x:  -0.22962
+    left_waypoint4_y:  0.35761
+    left_waypoint4_z:  0.07592
+    left_waypoint4_rx: 3.392
+    left_waypoint4_ry: -1.970
+    left_waypoint4_rz: 1.992
+    
+    right_waypoint3_x:  -0.58454
+    right_waypoint3_y:  0.04911
+    right_waypoint3_z:  0.10040
+    right_waypoint3_rx: 4.409
+    right_waypoint3_ry: 0.781
+    right_waypoint3_rz: -1.183
+
+    right_waypoint4_x:  -0.51816
+    right_waypoint4_y:  -0.07532
+    right_waypoint4_z:  0.10040
+    right_waypoint4_rx: 4.409
+    right_waypoint4_ry: 0.781
+    right_waypoint4_rz: -1.183
+
+    # Tuning parameters
+    approach_distance:  0.07
+    right_y_offset:     0.15
+    left_gripper_pin:   13
+    right_gripper_pin:  12
+    cartesian_waypoints: 10
