@@ -34,4 +34,4 @@ handover:
     right_y_offset:     0.15
     left_gripper_pin:   13
     right_gripper_pin:  12
-    cartesian_waypoints: 10
+    cartesian_waypoints: 20

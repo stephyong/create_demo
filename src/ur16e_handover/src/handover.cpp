@@ -55,7 +55,7 @@ static bool planAndExecuteCartesianBetween(
   const geometry_msgs::msg::Pose& end_pose,
   int num_waypoints,
   rclcpp::Logger logger,
-  double eef_step = 0.01,
+  double eef_step = 0.005,
   double jump_threshold = 0.0)
 {
   std::vector<geometry_msgs::msg::Pose> waypoints;
@@ -214,7 +214,7 @@ int main(int argc, char** argv)
   const std::string right_final_named      = node->declare_parameter<std::string>("right_final_named", "right_lower_object_position");
 
   // ---- Cartesian waypoint count ----
-  const int cartesian_waypoints = node->declare_parameter<int>("cartesian_waypoints", 10);
+  const int cartesian_waypoints = node->declare_parameter<int>("cartesian_waypoints", 20);
 
   // ---- Cartesian poses from UR pendant values (loaded from yaml) ----
   geometry_msgs::msg::Pose left_waypoint3 = poseFromURPendant(
@@ -261,10 +261,15 @@ int main(int argc, char** argv)
   moveit::planning_interface::MoveGroupInterface left_mgi(node,  left_group_name);
   moveit::planning_interface::MoveGroupInterface right_mgi(node, right_group_name);
 
-  left_mgi.setPlanningTime(15.0);
-  right_mgi.setPlanningTime(15.0);
+  left_mgi.setPlanningTime(20.0);
+  right_mgi.setPlanningTime(20.0);
   left_mgi.allowReplanning(true);
   right_mgi.allowReplanning(true);
+
+  left_mgi.setMaxVelocityScalingFactor(0.3);   // 0–1, lower = smoother/slower
+  left_mgi.setMaxAccelerationScalingFactor(0.2);
+  right_mgi.setMaxVelocityScalingFactor(0.3);
+  right_mgi.setMaxAccelerationScalingFactor(0.2);
 
   sleep_ms(800);
 
