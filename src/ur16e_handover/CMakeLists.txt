@@ -6,9 +6,10 @@ find_package(rclcpp REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(shape_msgs REQUIRED)
-find_package(ur_msgs REQUIRED)       # ADDITION 1
+find_package(ur_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
+
+# REMOVED: find_package(shape_msgs REQUIRED) — no longer used
 
 add_executable(handover src/handover.cpp)
 ament_target_dependencies(handover
@@ -16,14 +17,20 @@ ament_target_dependencies(handover
   moveit_ros_planning_interface
   moveit_msgs
   geometry_msgs
-  shape_msgs
   ur_msgs
+)
+
+target_link_libraries(handover
+  Eigen3::Eigen
 )
 
 install(TARGETS handover
   DESTINATION lib/${PROJECT_NAME}
 )
 install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+)
+install(DIRECTORY config            # ADDED — installs your yaml params file
   DESTINATION share/${PROJECT_NAME}
 )
 

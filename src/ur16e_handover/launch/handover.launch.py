@@ -6,14 +6,21 @@ from launch.substitutions import LaunchConfiguration
 from launch.conditions import UnlessCondition
 from launch_ros.substitutions import FindPackageShare
 from launch_ros.parameter_descriptions import ParameterValue
+from ament_index_python.packages import get_package_share_directory  
 import os
+
 def generate_launch_description():
+
+    params_file = os.path.join(                                        
+        get_package_share_directory('ur16e_handover'),                 
+        'config',                                                      
+        'waypoints.yaml')                                             
 
     handover_node = Node(
         package="ur16e_handover",
-        executable="handover", 
-        output="screen" #prints the node's logs to the terminal 
-
+        executable="handover",
+        output="screen",
+        parameters=[params_file]                                       
     )
 
     return LaunchDescription([
