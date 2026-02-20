@@ -12,6 +12,9 @@
 #include <chrono>
 #include <future>
 #include <cmath>
+#include <vector>
+#include <string>
+
 
 using namespace std::chrono_literals;
 
@@ -121,25 +124,22 @@ static bool planAndExecuteCartesianBetween(
   return true;
 }
 
-// ============================================================
-// Helper: convert UR pendant values to geometry_msgs::Pose
-//
-// UR pendant gives position in metres and orientation as
-// RX/RY/RZ Euler angles in degrees. This converts to a
-// quaternion using ZYX convention.
-// ============================================================
+
 static geometry_msgs::msg::Pose poseFromURPendant(
   double x, double y, double z,
-  double rx_deg, double ry_deg, double rz_deg)
+  double rx, double ry, double rz)
 {
-  double rx = rx_deg ;
-  double ry = ry_deg ;
-  double rz = rz_deg ;
+  // UR pendant RX/RY/RZ is a rotation vector (axis-angle):
+  // direction = axis of rotation, magnitude = angle in radians
+  Eigen::Vector3d rvec(rx, ry, rz);
+  double angle = rvec.norm();
 
-  Eigen::AngleAxisd roll (rx, Eigen::Vector3d::UnitX());
-  Eigen::AngleAxisd pitch(ry, Eigen::Vector3d::UnitY());
-  Eigen::AngleAxisd yaw  (rz, Eigen::Vector3d::UnitZ());
-  Eigen::Quaterniond q = yaw * pitch * roll;
+  Eigen::Quaterniond q;
+  if (angle < 1e-10) {
+    q = Eigen::Quaterniond::Identity();
+  } else {
+    q = Eigen::Quaterniond(Eigen::AngleAxisd(angle, rvec.normalized()));
+  }
   q.normalize();
 
   geometry_msgs::msg::Pose pose;
@@ -153,40 +153,31 @@ static geometry_msgs::msg::Pose poseFromURPendant(
   return pose;
 }
 
-// ============================================================
-// Helper: gripper IO control
-//
-// state = true  → close gripper (STATE_ON)
-// state = false → open gripper  (STATE_OFF)
-// ============================================================
-static bool set_gripper(
+static void gripper_on(
   rclcpp::Node::SharedPtr node,
-  rclcpp::Client<ur_msgs::srv::SetIO>::SharedPtr client,
-  uint8_t pin,
-  bool state,
-  const std::string& label)
+  rclcpp::Client<ur_msgs::srv::SetIO>::SharedPtr io_client,
+  int pin)
 {
-  if (!client->wait_for_service(5s)) {
-    RCLCPP_ERROR(node->get_logger(), "IO service not available for %s", label.c_str());
-    return false;
-  }
-
-  auto req   = std::make_shared<ur_msgs::srv::SetIO::Request>();
-  req->fun   = req->FUN_SET_DIGITAL_OUT;
-  req->pin   = pin;
-  req->state = state ? req->STATE_ON : req->STATE_OFF;
-
-  auto future = client->async_send_request(req);
-  if (future.wait_for(5s) != std::future_status::ready) {
-    RCLCPP_ERROR(node->get_logger(), "IO service timed out for %s", label.c_str());
-    return false;
-  }
-
-  RCLCPP_INFO(node->get_logger(), "Gripper %s: %s",
-              label.c_str(), state ? "CLOSED" : "OPEN");
-  return true;
+  auto request = std::make_shared<ur_msgs::srv::SetIO::Request>();
+  request->fun   = request->FUN_SET_DIGITAL_OUT;
+  request->pin   = pin;
+  request->state = request->STATE_ON;
+  (void)io_client->async_send_request(request);
+  RCLCPP_INFO(node->get_logger(), "Gripper ON (pin %d)", pin);
 }
 
+static void gripper_off(
+  rclcpp::Node::SharedPtr node,
+  rclcpp::Client<ur_msgs::srv::SetIO>::SharedPtr io_client,
+  int pin)
+{
+  auto request = std::make_shared<ur_msgs::srv::SetIO::Request>();
+  request->fun   = request->FUN_SET_DIGITAL_OUT;
+  request->pin   = pin;
+  request->state = request->STATE_OFF;
+  (void)io_client->async_send_request(request);
+  RCLCPP_INFO(node->get_logger(), "Gripper OFF (pin %d)", pin);
+}
 // ============================================================
 // Main
 // ============================================================
@@ -249,9 +240,10 @@ int main(int argc, char** argv)
     node->declare_parameter<double>("right_waypoint4_ry", 0.0),
     node->declare_parameter<double>("right_waypoint4_rz", 0.0));
 
-  // ---- Gripper IO pins ----
-  const uint8_t left_gripper_pin  = static_cast<uint8_t>(node->declare_parameter<int>("left_gripper_pin",  13));
-  const uint8_t right_gripper_pin = static_cast<uint8_t>(node->declare_parameter<int>("right_gripper_pin", 12));
+  //  Gripper IO pins 
+  int pin_out_left = 13;
+  int pin_out_right = 12;
+    
 
   // ---- IO clients ----
   auto left_io  = node->create_client<ur_msgs::srv::SetIO>("left_io_and_status_controller/set_io");
@@ -310,15 +302,6 @@ int main(int argc, char** argv)
   }
 
   // ============================================================
-  // Step 5a: Open right gripper before approach
-  // ============================================================
-  RCLCPP_INFO(node->get_logger(), "Step 5a: Opening right gripper");
-  if (!set_gripper(node, right_io, right_gripper_pin, false, "right")) {
-    RCLCPP_ERROR(node->get_logger(), "Failed Step 5a"); rclcpp::shutdown(); return 1;
-  }
-  sleep_ms(500);
-
-  // ============================================================
   // Step 5b: Right arm Cartesian approach to handover waypoint
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 5b: RIGHT Cartesian -> handover waypoint");
@@ -328,29 +311,21 @@ int main(int argc, char** argv)
     RCLCPP_ERROR(node->get_logger(), "Failed Step 5b"); rclcpp::shutdown(); return 1;
   }
 
-  sleep_ms(1000);
+  sleep_ms(3000);
 
   // ============================================================
   // Step 6: Right gripper closes (grips object)
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 6: Closing right gripper");
-  if (!set_gripper(node, right_io, right_gripper_pin, true, "right")) {
-    RCLCPP_ERROR(node->get_logger(), "Failed Step 6"); rclcpp::shutdown(); return 1;
-  }
-  sleep_ms(1000);
+  gripper_on(node, right_io, pin_out_right);
+  sleep_ms(5000);
 
-  // ============================================================
   // Step 7: Left gripper releases object
-  // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 7: Opening left gripper");
-  if (!set_gripper(node, left_io, left_gripper_pin, false, "left")) {
-    RCLCPP_ERROR(node->get_logger(), "Failed Step 7"); rclcpp::shutdown(); return 1;
-  }
+  gripper_off(node, left_io, pin_out_left);
   sleep_ms(500);
 
-  // ============================================================
-  // Step 8: Left arm Cartesian retract away from handover zone
-  // ============================================================
+ // Step 8: Left arm Cartesian retract away from handover zone
   RCLCPP_INFO(node->get_logger(), "Step 8: LEFT Cartesian -> retract waypoint");
   geometry_msgs::msg::Pose left_current = left_mgi.getCurrentPose(left_ee_link).pose;
   if (!planAndExecuteCartesianBetween(left_mgi, left_current, left_waypoint3,
@@ -358,9 +333,7 @@ int main(int argc, char** argv)
     RCLCPP_ERROR(node->get_logger(), "Failed Step 8"); rclcpp::shutdown(); return 1;
   }
 
-  // ============================================================
   // Step 9: Right arm Cartesian move to placement waypoint
-  // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 9: RIGHT Cartesian -> placement waypoint");
   right_current = right_mgi.getCurrentPose(right_ee_link).pose;
   if (!planAndExecuteCartesianBetween(right_mgi, right_current, right_waypoint4,
@@ -368,24 +341,27 @@ int main(int argc, char** argv)
     RCLCPP_ERROR(node->get_logger(), "Failed Step 9"); rclcpp::shutdown(); return 1;
   }
 
-  // ============================================================
+  RCLCPP_INFO(node->get_logger(), "Step 9b: LEFT Cartesian -> retract waypoint4");
+  left_current = left_mgi.getCurrentPose(left_ee_link).pose;
+  if (!planAndExecuteCartesianBetween(left_mgi, left_current, left_waypoint4,
+        cartesian_waypoints, node->get_logger())) {
+    RCLCPP_ERROR(node->get_logger(), "Failed Step 9b"); rclcpp::shutdown(); return 1;
+  }
+
   // Step 10: Right arm moves to final release position (joint-space)
-  // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 10: RIGHT -> final release position");
   right_mgi.setNamedTarget(right_final_named);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     RCLCPP_ERROR(node->get_logger(), "Failed Step 10"); rclcpp::shutdown(); return 1;
   }
-
+  sleep_ms(200);
   // ============================================================
   // Step 11: Right gripper releases object into box
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 11: Opening right gripper — releasing object");
   sleep_ms(500);
-  if (!set_gripper(node, right_io, right_gripper_pin, false, "right")) {
-    RCLCPP_ERROR(node->get_logger(), "Failed Step 11"); rclcpp::shutdown(); return 1;
-  }
-
+  gripper_off(node, right_io, pin_out_right);
+  sleep_ms(5000);
   RCLCPP_INFO(node->get_logger(), "Handover complete.");
   rclcpp::shutdown();
   return 0;
