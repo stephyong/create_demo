@@ -199,7 +199,7 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "Cube '%s' attached to %s", cube_id.c_str(), left_ee_link.c_str());
 
   RCLCPP_INFO(node->get_logger(), "Step 1: Move LEFT to named target '%s'", left_take_named.c_str());
-  left_mgi.setNamedTarget(left_take_named);
+  left_mgi.setJointValueTarget(left_take_named);
   if (!planAndExecute(left_mgi, node->get_logger())) {
     RCLCPP_ERROR(node->get_logger(), "Failed at Step 1a");
     rclcpp::shutdown();
@@ -207,7 +207,7 @@ int main(int argc, char** argv)
   }
   // 1) Move LEFT up to handover/present pose (named state from SRDF)
   RCLCPP_INFO(node->get_logger(), "Step 1a: Move LEFT to named target '%s'", left_present_named.c_str());
-  left_mgi.setNamedTarget(left_present_named);
+  left_mgi.setJointValueTarget(left_present_named);
   if (!planAndExecute(left_mgi, node->get_logger())) {
     RCLCPP_ERROR(node->get_logger(), "Failed at Step 1b");
     rclcpp::shutdown();
@@ -216,7 +216,7 @@ int main(int argc, char** argv)
 
   // 2) Move RIGHT to receive-ready pose
   RCLCPP_INFO(node->get_logger(), "Step 2: Move RIGHT to named target '%s'", right_receive_named.c_str());
-  right_mgi.setNamedTarget(right_receive_named);
+  right_mgi.setJointValueTarget(right_receive_named);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     RCLCPP_ERROR(node->get_logger(), "Failed at Step 2");
     rclcpp::shutdown();
@@ -253,7 +253,7 @@ int main(int argc, char** argv)
 
   // 4) Move RIGHT to final placement pose
   RCLCPP_INFO(node->get_logger(), "Step 4: Move RIGHT to named target '%s'", right_final_named.c_str());
-  right_mgi.setNamedTarget(right_final_named);
+  right_mgi.setJointValueTarget(right_final_named);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     RCLCPP_ERROR(node->get_logger(), "Failed at Step 4");
     rclcpp::shutdown();

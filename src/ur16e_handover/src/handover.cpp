@@ -219,13 +219,12 @@ int main(int argc, char** argv)
   const std::string left_ee_link     = node->declare_parameter<std::string>("left_ee_link",  "left_tool0");
   const std::string right_ee_link    = node->declare_parameter<std::string>("right_ee_link", "right_tool0");
 
-  // ---- Named states from SRDF (joint-space moves) ----
-  const std::string left_initial_position = node->declare_parameter<std::string>("left_initial_position",        "left_waypoint1"); // left initial position
-  const std::string left_handover = node->declare_parameter<std::string>("left_handover",     "left_waypoint2"); //left handover
-  const std::string right_initial_position = node->declare_parameter<std::string>("right_initial_position",   "right_waypoint1"); // right initial position
-  const std::string right_pre_handover = node->declare_parameter<std::string>("right_pre_handover", "right_waypoint2"); //pre and post handover
-  const std::string right_final_position_above = node->declare_parameter<std::string>("right_final_position_above",      "right_lower_object_position"); // right final position above box
-
+  //joint-space moves ----
+  std::vector<double> left_initial_position     = node->declare_parameter<std::vector<double>>("left_waypoint1", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+  std::vector<double> left_handover            = node->declare_parameter<std::vector<double>>("left_waypoint2", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+  std::vector<double> right_initial_position    = node->declare_parameter<std::vector<double>>("right_waypoint1", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+  std::vector<double> right_pre_handover             = node->declare_parameter<std::vector<double>>("right_waypoint2", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+  std::vector<double> right_final_position_above             = node->declare_parameter<std::vector<double>>("right_lower_object_position", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
   // ---- Cartesian waypoint count ----
   const int cartesian_waypoints = node->declare_parameter<int>("cartesian_waypoints", 20);
 
@@ -237,14 +236,6 @@ int main(int argc, char** argv)
     node->declare_parameter<double>("left_waypoint3_rx", 0.0),
     node->declare_parameter<double>("left_waypoint3_ry", 0.0),
     node->declare_parameter<double>("left_waypoint3_rz", 0.0));
-
-  // geometry_msgs::msg::Pose left_waypoint4 = poseFromURPendant(
-  //   node->declare_parameter<double>("left_waypoint4_x",  0.0),
-  //   node->declare_parameter<double>("left_waypoint4_y",  0.0),
-  //   node->declare_parameter<double>("left_waypoint4_z",  0.0),
-  //   node->declare_parameter<double>("left_waypoint4_rx", 0.0),
-  //   node->declare_parameter<double>("left_waypoint4_ry", 0.0),
-  //   node->declare_parameter<double>("left_waypoint4_rz", 0.0));
 
   geometry_msgs::msg::Pose right_handover = poseFromURPendant( //right handover
     node->declare_parameter<double>("right_waypoint3_x",  0.0),
@@ -309,7 +300,7 @@ int main(int argc, char** argv)
   // // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 1: LEFT -> receiving position");
   left_mgi.startStateMonitor(5.0);
-  left_mgi.setNamedTarget(left_initial_position);
+  left_mgi.setJointValueTarget(left_initial_position);
   if (!planAndExecute(left_mgi, node->get_logger())) {
     return fail("Failed Step 1");
   }
@@ -320,7 +311,7 @@ int main(int argc, char** argv)
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 2: LEFT -> handover position");
   left_mgi.startStateMonitor(5.0);
-  left_mgi.setNamedTarget(left_handover);
+  left_mgi.setJointValueTarget(left_handover);
   if (!planAndExecute(left_mgi, node->get_logger())) {
     return fail("Failed Step 2");
   }
@@ -331,7 +322,7 @@ int main(int argc, char** argv)
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 3: RIGHT -> pre-handover position 2");
   right_mgi.startStateMonitor(5.0);
-  right_mgi.setNamedTarget(right_initial_position);
+  right_mgi.setJointValueTarget(right_initial_position);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     return fail("Failed Step 3");
   }
@@ -342,7 +333,7 @@ int main(int argc, char** argv)
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 4: RIGHT -> pre-handover position 3");
   right_mgi.startStateMonitor(5.0);
-  right_mgi.setNamedTarget(right_pre_handover);
+  right_mgi.setJointValueTarget(right_pre_handover);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     return fail("Failed Step 4");
   }
@@ -406,7 +397,7 @@ int main(int argc, char** argv)
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 10: RIGHT -> final release position");
   right_mgi.startStateMonitor(5.0);
-  right_mgi.setNamedTarget(right_final_position_above);
+  right_mgi.setJointValueTarget(right_final_position_above);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     return fail("Failed Step 10");
   }

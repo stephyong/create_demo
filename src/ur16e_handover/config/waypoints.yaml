@@ -29,6 +29,12 @@ handover:
     right_waypoint5_ry: 0.289
     right_waypoint5_rz: -0.094
 
+    left_waypoint1 : [-0.2518866697894495, -1.2164602738669892, -2.014770746231079, -3.0570813618102015, -2.2569201628314417, 0.0768733024597168] # left starting position
+    left_waypoint2 : [0.481362, -1.789312, -1.449321, -2.960602, -2.598097, 0.177675] # left handover position
+    right_waypoint1 : [-3.2791, -1.6930, 2.1486, -2.3822, -2.7172, 1.8451] # right starting position
+    right_waypoint2 : [-3.226939, -1.052608, 1.002168, -0.619068, -3.008948, 2.288825] # pre and post handover are the same, right prehandover
+    right_lower_object_position : [-3.554538, -1.456826, 1.396787, -1.570447, -1.571320, 1.413891] # just before lowering
+
     # Tuning parameters
     approach_distance:  0.07
     right_y_offset:     0.15
