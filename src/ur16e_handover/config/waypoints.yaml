@@ -1,33 +1,33 @@
 handover:
   ros__parameters:
     # Left arm poses (position in metres, orientation in rad from pendant)
-    left_waypoint3_x:  -0.41918
-    left_waypoint3_y:  0.08981
-    left_waypoint3_z:  0.1084
-    left_waypoint3_rx: 3.392
-    left_waypoint3_ry: -1.970
-    left_waypoint3_rz: 1.992
-
-    left_waypoint4_x:  -0.22962
-    left_waypoint4_y:  0.35761
-    left_waypoint4_z:  0.07592
-    left_waypoint4_rx: 3.392
-    left_waypoint4_ry: -1.970
-    left_waypoint4_rz: 1.992
+    left_waypoint3_x:  -0.5285   #left post handover 
+    left_waypoint3_y:  0.14535
+    left_waypoint3_z:  0.10580
+    left_waypoint3_rx: 3.799
+    left_waypoint3_ry: -1.337
+    left_waypoint3_rz: 1.881
     
-    right_waypoint3_x:  -0.58454
-    right_waypoint3_y:  0.04911
-    right_waypoint3_z:  0.10040
-    right_waypoint3_rx: 4.409
-    right_waypoint3_ry: 0.781
-    right_waypoint3_rz: -1.183
+    right_waypoint3_x:  -0.62240  #righthandover
+    right_waypoint3_y:  0.03353
+    right_waypoint3_z:  0.10272
+    right_waypoint3_rx: 4.520
+    right_waypoint3_ry: 1.006
+    right_waypoint3_rz: -0.135
 
-    right_waypoint4_x:  -0.51816
-    right_waypoint4_y:  -0.07532
-    right_waypoint4_z:  0.10040
-    right_waypoint4_rx: 4.409
-    right_waypoint4_ry: 0.781
-    right_waypoint4_rz: -1.183
+    right_waypoint4_x:  -0.62240 #right post handover 
+    right_waypoint4_y:  -0.18753
+    right_waypoint4_z:  0.10271
+    right_waypoint4_rx: 4.520
+    right_waypoint4_ry: 1.006
+    right_waypoint4_rz: -0.136
+
+    right_waypoint5_x:  -0.54174 #right lower object to final position
+    right_waypoint5_y:  -0.18751
+    right_waypoint5_z:  -0.08904
+    right_waypoint5_rx: 3.135
+    right_waypoint5_ry: 0.289
+    right_waypoint5_rz: -0.094
 
     # Tuning parameters
     approach_distance:  0.07

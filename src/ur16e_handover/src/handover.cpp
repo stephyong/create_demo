@@ -5,6 +5,8 @@
 
 #include <geometry_msgs/msg/pose.hpp>
 #include <moveit_msgs/msg/robot_trajectory.hpp>
+#include <moveit/trajectory_processing/iterative_time_parameterization.h>
+#include <moveit/robot_trajectory/robot_trajectory.h>
 #include "ur_msgs/srv/set_io.hpp"
 
 #include <Eigen/Geometry>
@@ -56,41 +58,32 @@ static bool planAndExecuteCartesianBetween(
   const geometry_msgs::msg::Pose& end_pose,
   int num_waypoints,
   rclcpp::Logger logger,
-  double eef_step = 0.005,
-  double jump_threshold = 0.0)
+  double velocity_scale = 0.3,      // added these two params so you can
+  double accel_scale = 0.2,         // pass in your scaling factors
+  double eef_step = 0.01,           // changed default from 0.005 -> 0.01
+  double jump_threshold = 5.0)      // changed default from 0.0 -> 5.0
 {
   mgi.setStartStateToCurrentState();
 
+  // ---- Build waypoints (unchanged) ----
   std::vector<geometry_msgs::msg::Pose> waypoints;
   waypoints.push_back(start_pose);
 
-  Eigen::Vector3d p_start(
-    start_pose.position.x,
-    start_pose.position.y,
-    start_pose.position.z);
-  Eigen::Vector3d p_end(
-    end_pose.position.x,
-    end_pose.position.y,
-    end_pose.position.z);
+  Eigen::Vector3d p_start(start_pose.position.x, start_pose.position.y, start_pose.position.z);
+  Eigen::Vector3d p_end(end_pose.position.x, end_pose.position.y, end_pose.position.z);
 
-  Eigen::Quaterniond q_start(
-    start_pose.orientation.w,
-    start_pose.orientation.x,
-    start_pose.orientation.y,
-    start_pose.orientation.z);
-  Eigen::Quaterniond q_end(
-    end_pose.orientation.w,
-    end_pose.orientation.x,
-    end_pose.orientation.y,
-    end_pose.orientation.z);
+  Eigen::Quaterniond q_start(start_pose.orientation.w, start_pose.orientation.x,
+                              start_pose.orientation.y, start_pose.orientation.z);
+  Eigen::Quaterniond q_end(end_pose.orientation.w, end_pose.orientation.x,
+                            end_pose.orientation.y, end_pose.orientation.z);
   q_start.normalize();
   q_end.normalize();
 
   for (int i = 1; i <= num_waypoints; ++i) {
     double t = static_cast<double>(i) / static_cast<double>(num_waypoints);
 
-    Eigen::Vector3d    p_interp = (1.0 - t) * p_start + t * p_end;  // lerp
-    Eigen::Quaterniond q_interp = q_start.slerp(t, q_end);           // slerp
+    Eigen::Vector3d    p_interp = (1.0 - t) * p_start + t * p_end;
+    Eigen::Quaterniond q_interp = q_start.slerp(t, q_end);
 
     geometry_msgs::msg::Pose wp;
     wp.position.x    = p_interp.x();
@@ -100,13 +93,16 @@ static bool planAndExecuteCartesianBetween(
     wp.orientation.x = q_interp.x();
     wp.orientation.y = q_interp.y();
     wp.orientation.z = q_interp.z();
-
     waypoints.push_back(wp);
   }
 
+  // ---- Compute Cartesian path ----
   moveit_msgs::msg::RobotTrajectory trajectory;
   double fraction = mgi.computeCartesianPath(
     waypoints, eef_step, jump_threshold, trajectory);
+
+  RCLCPP_INFO(logger, "Cartesian path fraction: %.2f%% for '%s'",
+              fraction * 100.0, mgi.getName().c_str());
 
   if (fraction < 0.95) {
     RCLCPP_ERROR(logger, "Cartesian path only %.2f%% achieved for '%s'",
@@ -114,6 +110,21 @@ static bool planAndExecuteCartesianBetween(
     return false;
   }
 
+  robot_trajectory::RobotTrajectory rt(mgi.getRobotModel(), mgi.getName());
+  rt.setRobotTrajectoryMsg(*mgi.getCurrentState(), trajectory);
+
+  // Apply velocity and acceleration limits based on your scaling factors
+  trajectory_processing::IterativeParabolicTimeParameterization iptp;
+  bool time_param_ok = iptp.computeTimeStamps(rt, velocity_scale, accel_scale);
+  if (!time_param_ok) {
+    RCLCPP_ERROR(logger, "Time parameterisation failed for '%s'", mgi.getName().c_str());
+    return false;
+  }
+
+  // Convert back to message format so it can be executed
+  rt.getRobotTrajectoryMsg(trajectory);
+
+  // ---- Execute ----
   rclcpp::Clock clock;
   trajectory.joint_trajectory.header.stamp = clock.now();
 
@@ -209,18 +220,17 @@ int main(int argc, char** argv)
   const std::string right_ee_link    = node->declare_parameter<std::string>("right_ee_link", "right_tool0");
 
   // ---- Named states from SRDF (joint-space moves) ----
-  const std::string left_take_named        = node->declare_parameter<std::string>("left_take_named",        "left_receiving_position");
-  const std::string left_present_named     = node->declare_parameter<std::string>("left_present_named",     "left_handover_position");
-  const std::string right_handover_named   = node->declare_parameter<std::string>("right_handover_named",   "right_prehandover_position");
-  const std::string right_handover_named_2 = node->declare_parameter<std::string>("right_handover_named_2", "right_prehandover_position_2");
-  const std::string right_handover_named_3 = node->declare_parameter<std::string>("right_handover_named_3", "right_prehandover_position_3");
-  const std::string right_final_named      = node->declare_parameter<std::string>("right_final_named",      "right_lower_object_position");
+  const std::string left_initial_position = node->declare_parameter<std::string>("left_initial_position",        "left_waypoint1"); // left initial position
+  const std::string left_handover = node->declare_parameter<std::string>("left_handover",     "left_waypoint2"); //left handover
+  const std::string right_initial_position = node->declare_parameter<std::string>("right_initial_position",   "right_waypoint1"); // right initial position
+  const std::string right_pre_handover = node->declare_parameter<std::string>("right_pre_handover", "right_waypoint2"); //pre and post handover
+  const std::string right_final_position_above = node->declare_parameter<std::string>("right_final_position_above",      "right_lower_object_position"); // right final position above box
 
   // ---- Cartesian waypoint count ----
   const int cartesian_waypoints = node->declare_parameter<int>("cartesian_waypoints", 20);
 
   // ---- Cartesian poses from UR pendant values (loaded from yaml) ----
-  geometry_msgs::msg::Pose left_waypoint3 = poseFromURPendant(
+  geometry_msgs::msg::Pose left_post_handover = poseFromURPendant( //left post handover
     node->declare_parameter<double>("left_waypoint3_x",  0.0),
     node->declare_parameter<double>("left_waypoint3_y",  0.0),
     node->declare_parameter<double>("left_waypoint3_z",  0.0),
@@ -228,15 +238,15 @@ int main(int argc, char** argv)
     node->declare_parameter<double>("left_waypoint3_ry", 0.0),
     node->declare_parameter<double>("left_waypoint3_rz", 0.0));
 
-  geometry_msgs::msg::Pose left_waypoint4 = poseFromURPendant(
-    node->declare_parameter<double>("left_waypoint4_x",  0.0),
-    node->declare_parameter<double>("left_waypoint4_y",  0.0),
-    node->declare_parameter<double>("left_waypoint4_z",  0.0),
-    node->declare_parameter<double>("left_waypoint4_rx", 0.0),
-    node->declare_parameter<double>("left_waypoint4_ry", 0.0),
-    node->declare_parameter<double>("left_waypoint4_rz", 0.0));
+  // geometry_msgs::msg::Pose left_waypoint4 = poseFromURPendant(
+  //   node->declare_parameter<double>("left_waypoint4_x",  0.0),
+  //   node->declare_parameter<double>("left_waypoint4_y",  0.0),
+  //   node->declare_parameter<double>("left_waypoint4_z",  0.0),
+  //   node->declare_parameter<double>("left_waypoint4_rx", 0.0),
+  //   node->declare_parameter<double>("left_waypoint4_ry", 0.0),
+  //   node->declare_parameter<double>("left_waypoint4_rz", 0.0));
 
-  geometry_msgs::msg::Pose right_waypoint3 = poseFromURPendant(
+  geometry_msgs::msg::Pose right_handover = poseFromURPendant( //right handover
     node->declare_parameter<double>("right_waypoint3_x",  0.0),
     node->declare_parameter<double>("right_waypoint3_y",  0.0),
     node->declare_parameter<double>("right_waypoint3_z",  0.0),
@@ -244,13 +254,21 @@ int main(int argc, char** argv)
     node->declare_parameter<double>("right_waypoint3_ry", 0.0),
     node->declare_parameter<double>("right_waypoint3_rz", 0.0));
 
-  geometry_msgs::msg::Pose right_waypoint4 = poseFromURPendant(
+  geometry_msgs::msg::Pose right_post_handover_retract = poseFromURPendant( //right post handover
     node->declare_parameter<double>("right_waypoint4_x",  0.0),
     node->declare_parameter<double>("right_waypoint4_y",  0.0),
     node->declare_parameter<double>("right_waypoint4_z",  0.0),
     node->declare_parameter<double>("right_waypoint4_rx", 0.0),
     node->declare_parameter<double>("right_waypoint4_ry", 0.0),
     node->declare_parameter<double>("right_waypoint4_rz", 0.0));
+
+  geometry_msgs::msg::Pose right_lower_object_vertically = poseFromURPendant( //right lower object to final position
+    node->declare_parameter<double>("right_waypoint5_x",  0.0),
+    node->declare_parameter<double>("right_waypoint5_y",  0.0),
+    node->declare_parameter<double>("right_waypoint5_z",  0.0),
+    node->declare_parameter<double>("right_waypoint5_rx", 0.0),
+    node->declare_parameter<double>("right_waypoint5_ry", 0.0),
+    node->declare_parameter<double>("right_waypoint5_rz", 0.0));
 
   // ---- Gripper IO pins ----
   const int pin_out_left  = 13;
@@ -284,23 +302,25 @@ int main(int argc, char** argv)
   right_mgi.setMaxVelocityScalingFactor(0.3);
   right_mgi.setMaxAccelerationScalingFactor(0.2);
 
-  sleep_ms(3000);
+  sleep_ms(2000);
 
   // ============================================================
   // Step 1: Left arm moves to receiving position (joint-space)
   // // ============================================================
-  // RCLCPP_INFO(node->get_logger(), "Step 1: LEFT -> receiving position");
-  // left_mgi.setNamedTarget(left_take_named);
-  // if (!planAndExecute(left_mgi, node->get_logger())) {
-  //   return fail("Failed Step 1");
-  // }
-  // sleep_ms(2000);
+  RCLCPP_INFO(node->get_logger(), "Step 1: LEFT -> receiving position");
+  left_mgi.startStateMonitor(5.0);
+  left_mgi.setNamedTarget(left_initial_position);
+  if (!planAndExecute(left_mgi, node->get_logger())) {
+    return fail("Failed Step 1");
+  }
+  sleep_ms(2000);
 
   // ============================================================
   // Step 2: Left arm moves to handover position (joint-space)
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 2: LEFT -> handover position");
-  left_mgi.setNamedTarget(left_present_named);
+  left_mgi.startStateMonitor(5.0);
+  left_mgi.setNamedTarget(left_handover);
   if (!planAndExecute(left_mgi, node->get_logger())) {
     return fail("Failed Step 2");
   }
@@ -310,7 +330,8 @@ int main(int argc, char** argv)
   // Step 3: Right arm moves to pre-handover position 2 (joint-space)
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 3: RIGHT -> pre-handover position 2");
-  right_mgi.setNamedTarget(right_handover_named_2);
+  right_mgi.startStateMonitor(5.0);
+  right_mgi.setNamedTarget(right_initial_position);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     return fail("Failed Step 3");
   }
@@ -320,7 +341,8 @@ int main(int argc, char** argv)
   // Step 4: Right arm moves to pre-handover position 3 (joint-space)
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 4: RIGHT -> pre-handover position 3");
-  right_mgi.setNamedTarget(right_handover_named_3);
+  right_mgi.startStateMonitor(5.0);
+  right_mgi.setNamedTarget(right_pre_handover);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     return fail("Failed Step 4");
   }
@@ -330,9 +352,10 @@ int main(int argc, char** argv)
   // Step 5: Right arm Cartesian approach to handover waypoint
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 5: RIGHT Cartesian -> handover waypoint");
+  right_mgi.startStateMonitor(5.0);
   geometry_msgs::msg::Pose right_current = right_mgi.getCurrentPose(right_ee_link).pose;
-  if (!planAndExecuteCartesianBetween(right_mgi, right_current, right_waypoint3,
-        cartesian_waypoints, node->get_logger())) {
+  if (!planAndExecuteCartesianBetween(right_mgi, right_current, right_handover,
+        cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {
     return fail("Failed Step 5");
   }
 
@@ -350,15 +373,17 @@ int main(int argc, char** argv)
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 7: Opening left gripper");
   gripper_off(node, left_io, pin_out_left);
-  sleep_ms(500);
+  sleep_ms(5000);
 
   // ============================================================
   // Step 8: Left arm Cartesian retract away from handover zone
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 8: LEFT Cartesian -> retract waypoint");
+  left_mgi.startStateMonitor(5.0);
   geometry_msgs::msg::Pose left_current = left_mgi.getCurrentPose(left_ee_link).pose;
-  if (!planAndExecuteCartesianBetween(left_mgi, left_current, left_waypoint3,
-        cartesian_waypoints, node->get_logger())) {
+
+  if (!planAndExecuteCartesianBetween(left_mgi, left_current, left_post_handover,
+        cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {
     return fail("Failed Step 8");
   }
   sleep_ms(2000);
@@ -367,34 +392,34 @@ int main(int argc, char** argv)
   // Step 9: Right arm Cartesian move to placement waypoint
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 9: RIGHT Cartesian -> placement waypoint");
+  right_mgi.startStateMonitor(5.0);
   right_current = right_mgi.getCurrentPose(right_ee_link).pose;
-  if (!planAndExecuteCartesianBetween(right_mgi, right_current, right_waypoint4,
-        cartesian_waypoints, node->get_logger())) {
+  if (!planAndExecuteCartesianBetween(right_mgi, right_current, right_post_handover_retract,
+        cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {
     return fail("Failed Step 9");
   }
   sleep_ms(2000);
 
-  // ============================================================
-  // Step 9b: Left arm Cartesian move to second retract waypoint
-  // ============================================================
-  RCLCPP_INFO(node->get_logger(), "Step 9b: LEFT Cartesian -> retract waypoint 4");
-  left_current = left_mgi.getCurrentPose(left_ee_link).pose;
-  if (!planAndExecuteCartesianBetween(left_mgi, left_current, left_waypoint4,
-        cartesian_waypoints, node->get_logger())) {
-    return fail("Failed Step 9b");
-  }
-  sleep_ms(2000);
 
   // ============================================================
   // Step 10: Right arm moves to final release position (joint-space)
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 10: RIGHT -> final release position");
-  right_mgi.setNamedTarget(right_final_named);
+  right_mgi.startStateMonitor(5.0);
+  right_mgi.setNamedTarget(right_final_position_above);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     return fail("Failed Step 10");
   }
   sleep_ms(2000);
 
+  RCLCPP_INFO(node->get_logger(), "Step 10b: RIGHT Cartesian -> lower object vertically into box");
+  right_mgi.startStateMonitor(5.0);
+  right_current = right_mgi.getCurrentPose(right_ee_link).pose;
+  if (!planAndExecuteCartesianBetween(right_mgi, right_current, right_lower_object_vertically,
+        cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {
+    return fail("Failed Step 10b");
+  }
+  sleep_ms(2000);
   // ============================================================
   // Step 11: Right gripper releases object into box
   // ============================================================
