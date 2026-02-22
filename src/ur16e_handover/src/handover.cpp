@@ -173,13 +173,11 @@ static void gripper_on(
   int pin)
 {
   auto request = std::make_shared<ur_msgs::srv::SetIO::Request>();
-  request->fun   = request->FUN_SET_FLAG;  // <-- IMPORTANT
-  request->pin   = pin;                    // 13 for CONF_OUT5
+  request->fun   = request->FUN_SET_DIGITAL_OUT;
+  request->pin   = pin;
   request->state = request->STATE_ON;
-
   io_client->async_send_request(request);
-
-  RCLCPP_INFO(node->get_logger(), "Gripper ON (CONF pin %d)", pin);
+  RCLCPP_INFO(node->get_logger(), "Gripper ON (pin %d)", pin);
 }
 
 static void gripper_off(
@@ -188,13 +186,11 @@ static void gripper_off(
   int pin)
 {
   auto request = std::make_shared<ur_msgs::srv::SetIO::Request>();
-  request->fun   = request->FUN_SET_FLAG;  // <-- IMPORTANT
+  request->fun   = request->FUN_SET_DIGITAL_OUT;
   request->pin   = pin;
   request->state = request->STATE_OFF;
-
   io_client->async_send_request(request);
-
-  RCLCPP_INFO(node->get_logger(), "Gripper OFF (CONF pin %d)", pin);
+  RCLCPP_INFO(node->get_logger(), "Gripper OFF (pin %d)", pin);
 }
 
 
@@ -342,24 +338,26 @@ int main(int argc, char** argv)
   // }
   // sleep_ms(2000);
 
+  left_mgi.setStartStateToCurrentState();
+  right_mgi.setStartStateToCurrentState();
+  // Plan both arms first (in parallel)
+  moveit::planning_interface::MoveGroupInterface::Plan left_plan, right_plan;
+
+  left_mgi.setJointValueTarget(left_initial_position);
+  right_mgi.setJointValueTarget(right_initial_position);
 
   if (!run_parallel(
-    [&]() {
-        RCLCPP_INFO(node->get_logger(), "Step 1a: left arm receives object");
-        sleep_ms(1000);
-        left_mgi.setJointValueTarget(left_initial_position);
-        return planAndExecute(left_mgi, node->get_logger());
-    },
-    [&]() {
-        RCLCPP_INFO(node->get_logger(), "Step 1b: right arm goes to initial position");
-        sleep_ms(1000);
-        right_mgi.setJointValueTarget(right_initial_position);
-        return planAndExecute(right_mgi, node->get_logger());
-    }
-    )) return fail("Failed Step 1");
+    [&]() { return left_mgi.plan(left_plan) == moveit::core::MoveItErrorCode::SUCCESS; },
+    [&]() { return right_mgi.plan(right_plan) == moveit::core::MoveItErrorCode::SUCCESS; }
+  )) return fail("Failed to plan Step 1");
+
+  // Then execute both as close together as possible
+  if (!run_parallel(
+    [&]() { return left_mgi.execute(left_plan) == moveit::core::MoveItErrorCode::SUCCESS; },
+    [&]() { return right_mgi.execute(right_plan) == moveit::core::MoveItErrorCode::SUCCESS; }
+  )) return fail("Failed to execute Step 1");
+
   sleep_ms(2000);
-
-
 
 
   RCLCPP_INFO(node->get_logger(), "right arm moves to pre-handover position 1");
