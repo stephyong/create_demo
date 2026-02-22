@@ -221,6 +221,8 @@ int main(int argc, char** argv)
   //joint-space moves ----
   std::vector<double> left_initial_position = node->declare_parameter<std::vector<double>>("left_waypoint1", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
   std::vector<double> left_handover = node->declare_parameter<std::vector<double>>("left_waypoint2", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+  std::vector<double> left_post_handover = node->declare_parameter<std::vector<double>>("left_waypoint3", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+  std::vector<double> left_final_position = node->declare_parameter<std::vector<double>>("left_waypoint4", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
   std::vector<double> right_initial_position = node->declare_parameter<std::vector<double>>("right_waypoint1", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
   std::vector<double> right_prehandover1 = node->declare_parameter<std::vector<double>>("right_waypoint2", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
   std::vector<double> right_prehandover2 = node->declare_parameter<std::vector<double>>("right_waypoint3", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
@@ -228,16 +230,16 @@ int main(int argc, char** argv)
   std::vector<double> right_final_position  = node->declare_parameter<std::vector<double>>("right_waypoint5", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
 
   // ---- Cartesian waypoint count ----
-  const int cartesian_waypoints = node->declare_parameter<int>("cartesian_waypoints", 20);
+  const int cartesian_waypoints = node->declare_parameter<int>("cartesian_waypoints", 6);
 
-  // ---- Cartesian poses from UR pendant values (loaded from yaml) ----
-  geometry_msgs::msg::Pose left_post_handover = poseFromURPendant( //left post handover
-    node->declare_parameter<double>("left_waypoint3_x",  0.0),
-    node->declare_parameter<double>("left_waypoint3_y",  0.0),
-    node->declare_parameter<double>("left_waypoint3_z",  0.0),
-    node->declare_parameter<double>("left_waypoint3_rx", 0.0),
-    node->declare_parameter<double>("left_waypoint3_ry", 0.0),
-    node->declare_parameter<double>("left_waypoint3_rz", 0.0));
+  // // ---- Cartesian poses from UR pendant values (loaded from yaml) ----
+  // geometry_msgs::msg::Pose left_post_handover = poseFromURPendant( //left post handover
+  //   node->declare_parameter<double>("left_waypoint3_x",  0.0),
+  //   node->declare_parameter<double>("left_waypoint3_y",  0.0),
+  //   node->declare_parameter<double>("left_waypoint3_z",  0.0),
+  //   node->declare_parameter<double>("left_waypoint3_rx", 0.0),
+  //   node->declare_parameter<double>("left_waypoint3_ry", 0.0),
+  //   node->declare_parameter<double>("left_waypoint3_rz", 0.0));
 
   // geometry_msgs::msg::Pose right_handover = poseFromURPendant( //right handover
   //   node->declare_parameter<double>("right_waypoint3_x",  0.0),
@@ -278,6 +280,16 @@ int main(int argc, char** argv)
     RCLCPP_WARN(node->get_logger(), "Right SetIO service not available yet");
   }
 
+  // ---- Helper for running two functions in parallel and checking if both succeeded ----
+  auto run_parallel = [&](auto left_fn, auto right_fn) {
+        std::atomic<bool> left_success(false), right_success(false);
+        std::thread left_thread([&]() { left_success = left_fn(); });
+        std::thread right_thread([&]() { right_success = right_fn(); });
+        left_thread.join();
+        right_thread.join();
+        return left_success.load() && right_success.load();
+    };
+
   // ---- MoveIt interfaces ----
   moveit::planning_interface::MoveGroupInterface left_mgi(node,  left_group_name);
   moveit::planning_interface::MoveGroupInterface right_mgi(node, right_group_name);
@@ -302,153 +314,113 @@ int main(int argc, char** argv)
 
   sleep_ms(2000);
 
-  // ============================================================
-  // // Step 1: Left arm moves to receiving position (joint-space)
-  // // // ============================================================
-  // RCLCPP_INFO(node->get_logger(), "Step 1: LEFT -> receiving position");
-  // left_mgi.startStateMonitor(5.0);
+  // RCLCPP_INFO(node->get_logger(), "Step 1a: left arm receives object");
   // sleep_ms(1000);
   // left_mgi.setJointValueTarget(left_initial_position);
   // if (!planAndExecute(left_mgi, node->get_logger())) {
   //   return fail("Failed Step 1");
   // }
   // sleep_ms(2000);
-
-  // // ============================================================
-  // // Step 2: Left arm moves to handover position (joint-space)
-  // // ============================================================
-  // RCLCPP_INFO(node->get_logger(), "Step 2: LEFT -> handover position");
-  // left_mgi.startStateMonitor(5.0);
+  // RCLCPP_INFO(node->get_logger(), "Step 1b: right arm goes to initial position");
   // sleep_ms(1000);
-  // left_mgi.setJointValueTarget(left_handover);
-  // if (!planAndExecute(left_mgi, node->get_logger())) {
-  //   return fail("Failed Step 2");
+  // right_mgi.setJointValueTarget(right_initial_position);
+  // if (!planAndExecute(right_mgi, node->get_logger())) {
+  //   return fail("Failed Step 1b");
   // }
   // sleep_ms(2000);
 
-  // ============================================================
-  // Step 3: Right arm moves to pre-handover position 2 (joint-space)
-  // ============================================================
-  RCLCPP_INFO(node->get_logger(), "Step 3: RIGHT -> pre-handover position 2");
-  right_mgi.startStateMonitor(5.0);
+
+  if (!run_parallel(
+    [&]() {
+        RCLCPP_INFO(node->get_logger(), "Step 1a: left arm receives object");
+        sleep_ms(1000);
+        left_mgi.setJointValueTarget(left_initial_position);
+        return planAndExecute(left_mgi, node->get_logger());
+    },
+    [&]() {
+        RCLCPP_INFO(node->get_logger(), "Step 1b: right arm goes to initial position");
+        sleep_ms(1000);
+        right_mgi.setJointValueTarget(right_initial_position);
+        return planAndExecute(right_mgi, node->get_logger());
+    }
+    )) return fail("Failed Step 1");
+  sleep_ms(2000);
+
+
+
+  RCLCPP_INFO(node->get_logger(), "left arm goes to prehandover position");
   sleep_ms(1000);
-  right_mgi.setJointValueTarget(right_initial_position);
-  if (!planAndExecute(right_mgi, node->get_logger())) {
-    return fail("Failed Step 3");
+  left_mgi.setJointValueTarget(left_handover);
+  if (!planAndExecute(left_mgi, node->get_logger())) {
+    return fail("Failed to go to left handover position");
   }
   sleep_ms(2000);
 
-  // ============================================================
-  // Step 4: Right arm moves to pre-handover position 3 (joint-space)
-  // ============================================================
-  RCLCPP_INFO(node->get_logger(), "Step 4: RIGHT -> pre-handover position 3");
-  right_mgi.startStateMonitor(5.0);
-  sleep_ms(1000);
 
+
+  RCLCPP_INFO(node->get_logger(), "right arm moves to pre-handover position 1");
+  sleep_ms(1000);
   right_mgi.setJointValueTarget(right_prehandover1);
   if (!planAndExecute(right_mgi, node->get_logger())) {
-    return fail("Failed Step 4");
+    return fail("Failed to go to right pre-handover position 1");
   }
   sleep_ms(2000);
-///////PROBLEMS ONWARDS HERE
-  // ============================================================
-  // Step 5: Right arm Cartesian approach to handover waypoint
-  // ============================================================
-  RCLCPP_INFO(node->get_logger(), "Step 5: RIGHT Cartesian -> handover waypoint");
-  right_mgi.startStateMonitor(5.0);
-  // sleep_ms(1000);
-  // geometry_msgs::msg::Pose right_current = right_mgi.getCurrentPose(right_ee_link).pose;
-  // if (!planAndExecuteCartesianBetween(right_mgi, right_current, right_handover,
-  //       cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {
-  //   return fail("Failed Step 5");
-  // }
 
-  // sleep_ms(3000);
+
+  RCLCPP_INFO(node->get_logger(), "right arm moves to pre-handover position 2");
+  sleep_ms(1000);
   right_mgi.setJointValueTarget(right_prehandover2);
   if (!planAndExecute(right_mgi, node->get_logger())) {
-    return fail("Failed Step 5 (joint-space test)");
-  }
-
-  RCLCPP_INFO(node->get_logger(), "Step 4: RIGHT -> pre-handover position 3");
-  right_mgi.startStateMonitor(5.0);
-  sleep_ms(1000);
-
-  right_mgi.setJointValueTarget(right_handover);
-  if (!planAndExecute(right_mgi, node->get_logger())) {
-    return fail("Failed Step 4");
+    return fail("Failed to go to right pre-handover position 2");
   }
   sleep_ms(2000);
 
-  // ============================================================
-  // Step 6: Right gripper closes (grips object)
-  // ============================================================
+
+  RCLCPP_INFO(node->get_logger(), "right arm moves to handover position");
+  sleep_ms(1000);
+  right_mgi.setJointValueTarget(right_handover);
+  if (!planAndExecute(right_mgi, node->get_logger())) {
+    return fail("Failed to go to right handover position");
+  }
+  sleep_ms(2000);
+
+  
   RCLCPP_INFO(node->get_logger(), "Step 6: Closing right gripper");
   gripper_on(node, right_io, pin_out_right);
   sleep_ms(5000);
 
-  // ============================================================
-  // Step 7: Left gripper releases object
-  // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 7: Opening left gripper");
   gripper_off(node, left_io, pin_out_left);
   sleep_ms(5000);
 
-  // ============================================================
-  // Step 8: Left arm Cartesian retract away from handover zone
-  // ============================================================
-  // RCLCPP_INFO(node->get_logger(), "Step 8: LEFT Cartesian -> retract waypoint");
-  // left_mgi.startStateMonitor(5.0);
-  // sleep_ms(1000);
-  // geometry_msgs::msg::Pose left_current = left_mgi.getCurrentPose(left_ee_link).pose;
 
-  // if (!planAndExecuteCartesianBetween(left_mgi, left_current, left_post_handover,
-  //       cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {
-  //   return fail("Failed Step 8");
-  // }
-  // sleep_ms(2000);
-
-  // ============================================================
-  // Step 9: Right arm Cartesian move to placement waypoint
-  // ============================================================
-  // RCLCPP_INFO(node->get_logger(), "Step 9: RIGHT Cartesian -> placement waypoint");
-  // right_mgi.startStateMonitor(5.0);
-  // sleep_ms(1000);
-  // geometry_msgs::msg::Pose right_current = right_mgi.getCurrentPose(right_ee_link).pose;
-  // if (!planAndExecuteCartesianBetween(right_mgi, right_current, right_post_handover_retract,
-  //       cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {
-  //   return fail("Failed Step 9");
-  // }
-  // sleep_ms(2000);
+  RCLCPP_INFO(node->get_logger(), "right arm retracts back to pre-handover position 2");
+  sleep_ms(1000);
+  right_mgi.setJointValueTarget(right_prehandover2);
+  if (!planAndExecute(right_mgi, node->get_logger())) {
+    return fail("Failed to retract to right pre-handover position 2");
+  }
+  sleep_ms(2000);
 
 
-  // ============================================================
-  // Step 10: Right arm moves to final release position (joint-space)
-  // ============================================================
-  // RCLCPP_INFO(node->get_logger(), "Step 10: RIGHT -> final release position");
-  // right_mgi.startStateMonitor(5.0);
-  // sleep_ms(1000);
-  // right_mgi.setJointValueTarget(right_final_position);
-  // if (!planAndExecute(right_mgi, node->get_logger())) {
-  //   return fail("Failed Step 10");
-  // }
-  // sleep_ms(2000);
+  RCLCPP_INFO(node->get_logger(), "left arm retracts back to pre-handover position 1");
+  sleep_ms(1000);
+  left_mgi.setJointValueTarget(left_post_handover);
+  if (!planAndExecute(left_mgi, node->get_logger())) {
+    return fail("Failed to retract to left post-handover position");
+  }
+  sleep_ms(2000);
 
-  // RCLCPP_INFO(node->get_logger(), "Step 10b: RIGHT Cartesian -> lower object vertically into box");
-  // right_mgi.startStateMonitor(5.0);
-  // sleep_ms(1000);
-  // right_current = right_mgi.getCurrentPose(right_ee_link).pose;
-  // if (!planAndExecuteCartesianBetween(right_mgi, right_current, right_lower_object_vertically,
-  //       cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {
-  //   return fail("Failed Step 10b");
-  // }
-  // sleep_ms(2000);
-  // ============================================================
-  // Step 11: Right gripper releases object into box
-  // ============================================================
-  // RCLCPP_INFO(node->get_logger(), "Step 11: Opening right gripper - releasing object");
-  // sleep_ms(2000);
-  // gripper_off(node, right_io, pin_out_right);
-  // sleep_ms(5000);
+
+  RCLCPP_INFO(node->get_logger(), "right arm retracts back to initial position");
+  sleep_ms(1000);
+  right_mgi.setJointValueTarget(right_final_position);
+  if (!planAndExecute(right_mgi, node->get_logger())) {
+    return fail("Failed to retract to right initial position");
+  }
+  sleep_ms(2000); 
+
+
 
   RCLCPP_INFO(node->get_logger(), "Handover complete.");
 

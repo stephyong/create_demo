@@ -1,45 +1,51 @@
 handover_demo:
   ros__parameters:
-    # Left arm poses (position in metres, orientation in rad from pendant)
-    left_waypoint3_x: -0.109
-    left_waypoint3_y: -0.042
-    left_waypoint3_z:  0.504
-    left_waypoint3_qx:  0.583
-    left_waypoint3_qy:  0.381
-    left_waypoint3_qz:  0.459
-    left_waypoint3_qw:  0.552
+    # # Left arm poses (position in metres, orientation in rad from pendant)
+    # left_waypoint3_x: -0.109
+    # left_waypoint3_y: -0.042
+    # left_waypoint3_z:  0.504
+    # left_waypoint3_qx:  0.583
+    # left_waypoint3_qy:  0.381
+    # left_waypoint3_qz:  0.459
+    # left_waypoint3_qw:  0.552
     
-    # right_waypoint3_x:  0.272
-    # right_waypoint3_y:  0.017 #right handover 
-    # right_waypoint3_z:  0.522
-    # right_waypoint3_qx: -0.520
-    # right_waypoint3_qy: -0.520
-    # right_waypoint3_qz:  0.382
-    # right_waypoint3_qw:  0.560
+    # # right_waypoint3_x:  0.272
+    # # right_waypoint3_y:  0.017 #right handover 
+    # # right_waypoint3_z:  0.522
+    # # right_waypoint3_qx: -0.520
+    # # right_waypoint3_qy: -0.520
+    # # right_waypoint3_qz:  0.382
+    # # right_waypoint3_qw:  0.560
 
-    right_waypoint4_x:  0.449 #right post handover 
-    right_waypoint4_y: -0.066
-    right_waypoint4_z:  0.522
-    right_waypoint4_qx: -0.521
-    right_waypoint4_qy: -0.520
-    right_waypoint4_qz:  0.381
-    right_waypoint4_qw:  0.560
+    # right_waypoint4_x:  0.449 #right post handover 
+    # right_waypoint4_y: -0.066
+    # right_waypoint4_z:  0.522
+    # right_waypoint4_qx: -0.521
+    # right_waypoint4_qy: -0.520
+    # right_waypoint4_qz:  0.381
+    # right_waypoint4_qw:  0.560
 
-    right_waypoint5_x:  0.526
-    right_waypoint5_y: -0.030
-    right_waypoint5_z:  0.267
-    right_waypoint5_qx:  0.792
-    right_waypoint5_qy:  0.610
-    right_waypoint5_qz: -0.026
-    right_waypoint5_qw:  0.014
+    # right_waypoint5_x:  0.526
+    # right_waypoint5_y: -0.030
+    # right_waypoint5_z:  0.267
+    # right_waypoint5_qx:  0.792
+    # right_waypoint5_qy:  0.610
+    # right_waypoint5_qz: -0.026
+    # right_waypoint5_qw:  0.014
 
     left_waypoint1 : [-0.2518866697894495, -1.2164602738669892, -2.014770746231079, -3.0570813618102015, -2.2569201628314417, 0.0768733024597168] # left starting position
-    left_waypoint2 : [0.481362, -1.789312, -1.449321, -2.960602, -2.598097, 0.177675] # left handover position
+    left_waypoint2 : [0.541052, -1.708328, -1.543569, -2.955890, -2.503849, 0.094248] # left pre handover position
+    left_waypoint3 : [0.485725, -1.246514, -1.948311, -3.025354, -2.355845, 0.079063] # left handover position
+    left_waypoint4 : [-0.2518866697894495, -1.2164602738669892, -2.014770746231079, -3.0570813618102015, -2.2569201628314417, 0.0768733024597168] # left starting position
+
+
+
     right_waypoint1 : [-3.278048, -1.692969, 2.149362, -2.381841, -2.717194, 1.845185] # right starting position
     right_waypoint2 : [-3.209112, -1.692969, 2.227193, -0.523774, -4.560818, 3.240626] # pre and post handover are the same, right prehandover
     right_waypoint3: [-3.367466, -1.316510, 1.374252, 0.000524, -3.373750, 3.294144]
     right_waypoint4 : [-3.638816, -1.304110, 1.356994, -0.025832, -3.644771, 3.262744] # just before lowering
     right_waypoint5 : [-3.367466, -1.316510, 1.374252, 0.000524, -3.373750, 3.294144] # ???
+
 
     # Tuning parameters
     approach_distance:  0.07
