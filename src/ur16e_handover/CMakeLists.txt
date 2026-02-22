@@ -8,10 +8,18 @@ find_package(moveit_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(ur_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
 
-# REMOVED: find_package(shape_msgs REQUIRED) — no longer used
+# Generate service interfaces FIRST
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "srv/robot_to_robot_handover.srv"
+)
+
+rosidl_get_typesupport_target(cpp_typesupport_target
+  ${PROJECT_NAME} rosidl_typesupport_cpp)
 
 add_executable(handover_demo src/handover.cpp)
+
 ament_target_dependencies(handover_demo
   rclcpp
   moveit_ros_planning_interface
@@ -22,15 +30,18 @@ ament_target_dependencies(handover_demo
 
 target_link_libraries(handover_demo
   Eigen3::Eigen
+  "${cpp_typesupport_target}"
 )
 
 install(TARGETS handover_demo
   DESTINATION lib/${PROJECT_NAME}
 )
+
 install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}
 )
-install(DIRECTORY config            # ADDED — installs your yaml params file
+
+install(DIRECTORY config
   DESTINATION share/${PROJECT_NAME}
 )
 
