@@ -347,14 +347,18 @@ int main(int argc, char** argv)
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 5: RIGHT Cartesian -> handover waypoint");
   right_mgi.startStateMonitor(5.0);
-  sleep_ms(1000);
-  geometry_msgs::msg::Pose right_current = right_mgi.getCurrentPose(right_ee_link).pose;
-  if (!planAndExecuteCartesianBetween(right_mgi, right_current, right_handover,
-        cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {
-    return fail("Failed Step 5");
-  }
+  // sleep_ms(1000);
+  // geometry_msgs::msg::Pose right_current = right_mgi.getCurrentPose(right_ee_link).pose;
+  // if (!planAndExecuteCartesianBetween(right_mgi, right_current, right_handover,
+  //       cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {
+  //   return fail("Failed Step 5");
+  // }
 
-  sleep_ms(3000);
+  // sleep_ms(3000);
+  right_mgi.setPoseTarget(right_handover, right_ee_link);
+  if (!planAndExecute(right_mgi, node->get_logger())) {
+    return fail("Failed Step 5 (joint-space test)");
+  }
 
   // ============================================================
   // Step 6: Right gripper closes (grips object)
