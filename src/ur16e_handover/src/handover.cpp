@@ -41,7 +41,7 @@ static bool planAndExecute(
 
 
   rclcpp::Clock clock;
-  plan.trajectory_.joint_trajectory.header.stamp = clock.now();
+  plan.trajectory_.joint_trajectory.header.stamp = rclcpp::Time(0);
 
   auto exec_rc = mgi.execute(plan);
   if (exec_rc != moveit::core::MoveItErrorCode::SUCCESS) {
@@ -172,12 +172,14 @@ static void gripper_on(
   rclcpp::Client<ur_msgs::srv::SetIO>::SharedPtr io_client,
   int pin)
 {
-  auto request   = std::make_shared<ur_msgs::srv::SetIO::Request>();
-  request->fun   = request->FUN_SET_DIGITAL_OUT;
-  request->pin   = pin;
+  auto request = std::make_shared<ur_msgs::srv::SetIO::Request>();
+  request->fun   = request->FUN_SET_FLAG;  // <-- IMPORTANT
+  request->pin   = pin;                    // 13 for CONF_OUT5
   request->state = request->STATE_ON;
-  (void)io_client->async_send_request(request);
-  RCLCPP_INFO(node->get_logger(), "Gripper ON (pin %d)", pin);
+
+  io_client->async_send_request(request);
+
+  RCLCPP_INFO(node->get_logger(), "Gripper ON (CONF pin %d)", pin);
 }
 
 static void gripper_off(
@@ -185,13 +187,16 @@ static void gripper_off(
   rclcpp::Client<ur_msgs::srv::SetIO>::SharedPtr io_client,
   int pin)
 {
-  auto request   = std::make_shared<ur_msgs::srv::SetIO::Request>();
-  request->fun   = request->FUN_SET_DIGITAL_OUT;
+  auto request = std::make_shared<ur_msgs::srv::SetIO::Request>();
+  request->fun   = request->FUN_SET_FLAG;  // <-- IMPORTANT
   request->pin   = pin;
   request->state = request->STATE_OFF;
-  (void)io_client->async_send_request(request);
-  RCLCPP_INFO(node->get_logger(), "Gripper OFF (pin %d)", pin);
+
+  io_client->async_send_request(request);
+
+  RCLCPP_INFO(node->get_logger(), "Gripper OFF (CONF pin %d)", pin);
 }
+
 
 int main(int argc, char** argv)
 {
@@ -199,9 +204,15 @@ int main(int argc, char** argv)
 
   rclcpp::NodeOptions opts;
   auto node = rclcpp::Node::make_shared("handover_demo", opts);
+  auto left_node = rclcpp::Node::make_shared("left_arm_node", opts);
+  auto right_node = rclcpp::Node::make_shared("right_arm_node", opts);
+
 
   rclcpp::executors::MultiThreadedExecutor exec;
   exec.add_node(node);
+  exec.add_node(left_node);
+  exec.add_node(right_node);
+
   std::thread spinner([&exec]() { exec.spin(); });
 
   // Convenience lambda for clean failure exit
@@ -227,7 +238,9 @@ int main(int argc, char** argv)
   std::vector<double> right_prehandover1 = node->declare_parameter<std::vector<double>>("right_waypoint2", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
   std::vector<double> right_prehandover2 = node->declare_parameter<std::vector<double>>("right_waypoint3", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
   std::vector<double> right_handover  = node->declare_parameter<std::vector<double>>("right_waypoint4", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
-  std::vector<double> right_final_position  = node->declare_parameter<std::vector<double>>("right_waypoint5", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+  std::vector<double> right_prehandover2_2 = node->declare_parameter<std::vector<double>>("right_waypoint5", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+  std::vector<double> right_final_position_above  = node->declare_parameter<std::vector<double>>("right_waypoint6", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+  std::vector<double> right_final_position_end  = node->declare_parameter<std::vector<double>>("right_waypoint7", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
 
   // ---- Cartesian waypoint count ----
   const int cartesian_waypoints = node->declare_parameter<int>("cartesian_waypoints", 6);
@@ -266,8 +279,8 @@ int main(int argc, char** argv)
   //   node->declare_parameter<double>("right_waypoint5_rz", 0.0));
 
   // ---- Gripper IO pins ----
-  const int pin_out_left  = 13;
-  const int pin_out_right = 12;
+  const int left_pin  = 13;  // CONF_OUT5
+  const int right_pin = 13;  // CONF_OUT5 
 
   // ---- IO clients ----
   auto left_io  = node->create_client<ur_msgs::srv::SetIO>("left_io_and_status_controller/set_io");
@@ -291,8 +304,8 @@ int main(int argc, char** argv)
     };
 
   // ---- MoveIt interfaces ----
-  moveit::planning_interface::MoveGroupInterface left_mgi(node,  left_group_name);
-  moveit::planning_interface::MoveGroupInterface right_mgi(node, right_group_name);
+  moveit::planning_interface::MoveGroupInterface left_mgi(left_node,  left_group_name);
+  moveit::planning_interface::MoveGroupInterface right_mgi(right_node, right_group_name);
   RCLCPP_INFO(node->get_logger(), "LEFT  planning frame: %s", left_mgi.getPlanningFrame().c_str()); //world
   RCLCPP_INFO(node->get_logger(), "LEFT  pose ref frame: %s", left_mgi.getPoseReferenceFrame().c_str()); //world 
 
@@ -348,15 +361,6 @@ int main(int argc, char** argv)
 
 
 
-  RCLCPP_INFO(node->get_logger(), "left arm goes to prehandover position");
-  sleep_ms(1000);
-  left_mgi.setJointValueTarget(left_handover);
-  if (!planAndExecute(left_mgi, node->get_logger())) {
-    return fail("Failed to go to left handover position");
-  }
-  sleep_ms(2000);
-
-
 
   RCLCPP_INFO(node->get_logger(), "right arm moves to pre-handover position 1");
   sleep_ms(1000);
@@ -373,7 +377,14 @@ int main(int argc, char** argv)
   if (!planAndExecute(right_mgi, node->get_logger())) {
     return fail("Failed to go to right pre-handover position 2");
   }
-  sleep_ms(2000);
+ 
+
+  RCLCPP_INFO(node->get_logger(), "left arm goes to handover position");
+  sleep_ms(1000);
+  left_mgi.setJointValueTarget(left_handover);
+  if (!planAndExecute(left_mgi, node->get_logger())) {
+    return fail("Failed to go to left handover position");
+  }
 
 
   RCLCPP_INFO(node->get_logger(), "right arm moves to handover position");
@@ -386,11 +397,11 @@ int main(int argc, char** argv)
 
   
   RCLCPP_INFO(node->get_logger(), "Step 6: Closing right gripper");
-  gripper_on(node, right_io, pin_out_right);
+  gripper_on(node, right_io, 13);
   sleep_ms(5000);
 
   RCLCPP_INFO(node->get_logger(), "Step 7: Opening left gripper");
-  gripper_off(node, left_io, pin_out_left);
+  gripper_off(node, left_io, 13);
   sleep_ms(5000);
 
 
@@ -401,7 +412,7 @@ int main(int argc, char** argv)
     return fail("Failed to retract to right pre-handover position 2");
   }
   sleep_ms(2000);
-
+  
 
   RCLCPP_INFO(node->get_logger(), "left arm retracts back to pre-handover position 1");
   sleep_ms(1000);
@@ -414,12 +425,34 @@ int main(int argc, char** argv)
 
   RCLCPP_INFO(node->get_logger(), "right arm retracts back to initial position");
   sleep_ms(1000);
-  right_mgi.setJointValueTarget(right_final_position);
+  right_mgi.setJointValueTarget(right_prehandover2_2);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     return fail("Failed to retract to right initial position");
   }
   sleep_ms(2000); 
 
+
+  RCLCPP_INFO(node->get_logger(), "right arm goes perpendicular to the table");
+  sleep_ms(1000);
+  right_mgi.setJointValueTarget(right_final_position_above);
+  if (!planAndExecute(right_mgi, node->get_logger())) {
+    return fail("Failed to position arm perpendicular to table ");
+  }
+  sleep_ms(2000); 
+
+
+  RCLCPP_INFO(node->get_logger(), "right arm lowers object");
+  sleep_ms(1000);
+  right_mgi.setJointValueTarget(right_final_position_end);
+  if (!planAndExecute(right_mgi, node->get_logger())) {
+    return fail("Failed to lower object");
+  }
+  sleep_ms(2000); 
+
+
+  RCLCPP_INFO(node->get_logger(), "opening right gripper");
+  gripper_off(node, right_io, 13);
+  sleep_ms(5000);
 
 
   RCLCPP_INFO(node->get_logger(), "Handover complete.");

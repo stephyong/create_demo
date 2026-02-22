@@ -44,7 +44,9 @@ handover_demo:
     right_waypoint2 : [-3.209112, -1.692969, 2.227193, -0.523774, -4.560818, 3.240626] # pre and post handover are the same, right prehandover
     right_waypoint3: [-3.367466, -1.316510, 1.374252, 0.000524, -3.373750, 3.294144]
     right_waypoint4 : [-3.638816, -1.304110, 1.356994, -0.025832, -3.644771, 3.262744] # just before lowering
-    right_waypoint5 : [-3.367466, -1.316510, 1.374252, 0.000524, -3.373750, 3.294144] # ???
+    right_waypoint5 : [-3.367466, -1.316510, 1.374252, 0.000524, -3.373750, 3.294144] # waypoint3
+    right_waypoint6 : [-3.298498, -0.960452, 0.993963, 1.513210, -4.729055, 3.586651] #position above just before lowering
+    right_waypoint7 : [-3.298324, -0.937063, 1.162943, 1.321784, -4.729055, 3.587698] # final position, end
 
 
     # Tuning parameters
