@@ -224,6 +224,8 @@ int main(int argc, char** argv)
   std::vector<double> right_initial_position    = node->declare_parameter<std::vector<double>>("right_waypoint1", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
   std::vector<double> right_pre_handover             = node->declare_parameter<std::vector<double>>("right_waypoint2", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
   std::vector<double> right_final_position_above             = node->declare_parameter<std::vector<double>>("right_lower_object_position", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+  std::vector<double> right_handover             = node->declare_parameter<std::vector<double>>("right_handover", {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+
   // ---- Cartesian waypoint count ----
   const int cartesian_waypoints = node->declare_parameter<int>("cartesian_waypoints", 20);
 
@@ -236,13 +238,13 @@ int main(int argc, char** argv)
     node->declare_parameter<double>("left_waypoint3_ry", 0.0),
     node->declare_parameter<double>("left_waypoint3_rz", 0.0));
 
-  geometry_msgs::msg::Pose right_handover = poseFromURPendant( //right handover
-    node->declare_parameter<double>("right_waypoint3_x",  0.0),
-    node->declare_parameter<double>("right_waypoint3_y",  0.0),
-    node->declare_parameter<double>("right_waypoint3_z",  0.0),
-    node->declare_parameter<double>("right_waypoint3_rx", 0.0),
-    node->declare_parameter<double>("right_waypoint3_ry", 0.0),
-    node->declare_parameter<double>("right_waypoint3_rz", 0.0));
+  // geometry_msgs::msg::Pose right_handover = poseFromURPendant( //right handover
+  //   node->declare_parameter<double>("right_waypoint3_x",  0.0),
+  //   node->declare_parameter<double>("right_waypoint3_y",  0.0),
+  //   node->declare_parameter<double>("right_waypoint3_z",  0.0),
+  //   node->declare_parameter<double>("right_waypoint3_rx", 0.0),
+  //   node->declare_parameter<double>("right_waypoint3_ry", 0.0),
+  //   node->declare_parameter<double>("right_waypoint3_rz", 0.0));
 
   geometry_msgs::msg::Pose right_post_handover_retract = poseFromURPendant( //right post handover
     node->declare_parameter<double>("right_waypoint4_x",  0.0),
@@ -278,6 +280,11 @@ int main(int argc, char** argv)
   // ---- MoveIt interfaces ----
   moveit::planning_interface::MoveGroupInterface left_mgi(node,  left_group_name);
   moveit::planning_interface::MoveGroupInterface right_mgi(node, right_group_name);
+  RCLCPP_INFO(node->get_logger(), "LEFT  planning frame: %s", left_mgi.getPlanningFrame().c_str()); //world
+  RCLCPP_INFO(node->get_logger(), "LEFT  pose ref frame: %s", left_mgi.getPoseReferenceFrame().c_str()); //world 
+
+  RCLCPP_INFO(node->get_logger(), "RIGHT planning frame: %s", right_mgi.getPlanningFrame().c_str()); //world
+  RCLCPP_INFO(node->get_logger(), "RIGHT pose ref frame: %s", right_mgi.getPoseReferenceFrame().c_str()); //world
 
   left_mgi.startStateMonitor(2.0);
   right_mgi.startStateMonitor(2.0);
@@ -355,7 +362,7 @@ int main(int argc, char** argv)
   // }
 
   // sleep_ms(3000);
-  right_mgi.setPoseTarget(right_handover, right_ee_link);
+  right_mgi.setJointValueTarget(right_handover);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     return fail("Failed Step 5 (joint-space test)");
   }
@@ -394,7 +401,7 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "Step 9: RIGHT Cartesian -> placement waypoint");
   right_mgi.startStateMonitor(5.0);
   sleep_ms(1000);
-  right_current = right_mgi.getCurrentPose(right_ee_link).pose;
+  geometry_msgs::msg::Pose right_current = right_mgi.getCurrentPose(right_ee_link).pose;
   if (!planAndExecuteCartesianBetween(right_mgi, right_current, right_post_handover_retract,
         cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {
     return fail("Failed Step 9");
