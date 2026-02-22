@@ -1,38 +1,42 @@
-handover:
+handover_demo:
   ros__parameters:
     # Left arm poses (position in metres, orientation in rad from pendant)
-    left_waypoint3_x:  -0.5285   #left post handover 
-    left_waypoint3_y:  0.14535
-    left_waypoint3_z:  0.10580
-    left_waypoint3_rx: 3.799
-    left_waypoint3_ry: -1.337
-    left_waypoint3_rz: 1.881
+    left_waypoint3_x: -0.109
+    left_waypoint3_y: -0.042
+    left_waypoint3_z:  0.504
+    left_waypoint3_qx:  0.583
+    left_waypoint3_qy:  0.381
+    left_waypoint3_qz:  0.459
+    left_waypoint3_qw:  0.552
     
-    right_waypoint3_x:  -0.62240  #righthandover
-    right_waypoint3_y:  0.03353
-    right_waypoint3_z:  0.10272
-    right_waypoint3_rx: 4.520
-    right_waypoint3_ry: 1.006
-    right_waypoint3_rz: -0.135
+    right_waypoint3_x:  0.272
+    right_waypoint3_y:  0.017 #right handover 
+    right_waypoint3_z:  0.522
+    right_waypoint3_qx: -0.520
+    right_waypoint3_qy: -0.520
+    right_waypoint3_qz:  0.382
+    right_waypoint3_qw:  0.560
 
-    right_waypoint4_x:  -0.62240 #right post handover 
-    right_waypoint4_y:  -0.18753
-    right_waypoint4_z:  0.10271
-    right_waypoint4_rx: 4.520
-    right_waypoint4_ry: 1.006
-    right_waypoint4_rz: -0.136
+    right_waypoint4_x:  0.449 #right post handover 
+    right_waypoint4_y: -0.066
+    right_waypoint4_z:  0.522
+    right_waypoint4_qx: -0.521
+    right_waypoint4_qy: -0.520
+    right_waypoint4_qz:  0.381
+    right_waypoint4_qw:  0.560
 
-    right_waypoint5_x:  -0.54174 #right lower object to final position
-    right_waypoint5_y:  -0.18751
-    right_waypoint5_z:  -0.08904
-    right_waypoint5_rx: 3.135
-    right_waypoint5_ry: 0.289
-    right_waypoint5_rz: -0.094
+    right_waypoint5_x:  0.526
+    right_waypoint5_y: -0.030
+    right_waypoint5_z:  0.267
+    right_waypoint5_qx:  0.792
+    right_waypoint5_qy:  0.610
+    right_waypoint5_qz: -0.026
+    right_waypoint5_qw:  0.014
 
     left_waypoint1 : [-0.2518866697894495, -1.2164602738669892, -2.014770746231079, -3.0570813618102015, -2.2569201628314417, 0.0768733024597168] # left starting position
     left_waypoint2 : [0.481362, -1.789312, -1.449321, -2.960602, -2.598097, 0.177675] # left handover position
     right_waypoint1 : [-3.2791, -1.6930, 2.1486, -2.3822, -2.7172, 1.8451] # right starting position
-    right_waypoint2 : [-3.226939, -1.052608, 1.002168, -0.619068, -3.008948, 2.288825] # pre and post handover are the same, right prehandover
+    right_waypoint2 : [-3.2584, -1.1683, 1.1689, -0.8477, -3.0316, 2.1099] # pre and post handover are the same, right prehandover
     right_lower_object_position : [-3.554538, -1.456826, 1.396787, -1.570447, -1.571320, 1.413891] # just before lowering
 
     # Tuning parameters

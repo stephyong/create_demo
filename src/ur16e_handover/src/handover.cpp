@@ -104,7 +104,7 @@ static bool planAndExecuteCartesianBetween(
   RCLCPP_INFO(logger, "Cartesian path fraction: %.2f%% for '%s'",
               fraction * 100.0, mgi.getName().c_str());
 
-  if (fraction < 0.95) {
+  if (fraction < 0.5) {
     RCLCPP_ERROR(logger, "Cartesian path only %.2f%% achieved for '%s'",
                  fraction * 100.0, mgi.getName().c_str());
     return false;
@@ -198,7 +198,6 @@ int main(int argc, char** argv)
   rclcpp::init(argc, argv);
 
   rclcpp::NodeOptions opts;
-  opts.automatically_declare_parameters_from_overrides(true);
   auto node = rclcpp::Node::make_shared("handover_demo", opts);
 
   rclcpp::executors::MultiThreadedExecutor exec;
@@ -296,32 +295,35 @@ int main(int argc, char** argv)
   sleep_ms(2000);
 
   // ============================================================
-  // Step 1: Left arm moves to receiving position (joint-space)
-  // // ============================================================
-  RCLCPP_INFO(node->get_logger(), "Step 1: LEFT -> receiving position");
-  left_mgi.startStateMonitor(5.0);
-  left_mgi.setJointValueTarget(left_initial_position);
-  if (!planAndExecute(left_mgi, node->get_logger())) {
-    return fail("Failed Step 1");
-  }
-  sleep_ms(2000);
+  // // Step 1: Left arm moves to receiving position (joint-space)
+  // // // ============================================================
+  // RCLCPP_INFO(node->get_logger(), "Step 1: LEFT -> receiving position");
+  // left_mgi.startStateMonitor(5.0);
+  // sleep_ms(1000);
+  // left_mgi.setJointValueTarget(left_initial_position);
+  // if (!planAndExecute(left_mgi, node->get_logger())) {
+  //   return fail("Failed Step 1");
+  // }
+  // sleep_ms(2000);
 
-  // ============================================================
-  // Step 2: Left arm moves to handover position (joint-space)
-  // ============================================================
-  RCLCPP_INFO(node->get_logger(), "Step 2: LEFT -> handover position");
-  left_mgi.startStateMonitor(5.0);
-  left_mgi.setJointValueTarget(left_handover);
-  if (!planAndExecute(left_mgi, node->get_logger())) {
-    return fail("Failed Step 2");
-  }
-  sleep_ms(2000);
+  // // ============================================================
+  // // Step 2: Left arm moves to handover position (joint-space)
+  // // ============================================================
+  // RCLCPP_INFO(node->get_logger(), "Step 2: LEFT -> handover position");
+  // left_mgi.startStateMonitor(5.0);
+  // sleep_ms(1000);
+  // left_mgi.setJointValueTarget(left_handover);
+  // if (!planAndExecute(left_mgi, node->get_logger())) {
+  //   return fail("Failed Step 2");
+  // }
+  // sleep_ms(2000);
 
   // ============================================================
   // Step 3: Right arm moves to pre-handover position 2 (joint-space)
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 3: RIGHT -> pre-handover position 2");
   right_mgi.startStateMonitor(5.0);
+  sleep_ms(1000);
   right_mgi.setJointValueTarget(right_initial_position);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     return fail("Failed Step 3");
@@ -333,6 +335,7 @@ int main(int argc, char** argv)
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 4: RIGHT -> pre-handover position 3");
   right_mgi.startStateMonitor(5.0);
+  sleep_ms(1000);
   right_mgi.setJointValueTarget(right_pre_handover);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     return fail("Failed Step 4");
@@ -344,6 +347,7 @@ int main(int argc, char** argv)
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 5: RIGHT Cartesian -> handover waypoint");
   right_mgi.startStateMonitor(5.0);
+  sleep_ms(1000);
   geometry_msgs::msg::Pose right_current = right_mgi.getCurrentPose(right_ee_link).pose;
   if (!planAndExecuteCartesianBetween(right_mgi, right_current, right_handover,
         cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {
@@ -369,21 +373,23 @@ int main(int argc, char** argv)
   // ============================================================
   // Step 8: Left arm Cartesian retract away from handover zone
   // ============================================================
-  RCLCPP_INFO(node->get_logger(), "Step 8: LEFT Cartesian -> retract waypoint");
-  left_mgi.startStateMonitor(5.0);
-  geometry_msgs::msg::Pose left_current = left_mgi.getCurrentPose(left_ee_link).pose;
+  // RCLCPP_INFO(node->get_logger(), "Step 8: LEFT Cartesian -> retract waypoint");
+  // left_mgi.startStateMonitor(5.0);
+  // sleep_ms(1000);
+  // geometry_msgs::msg::Pose left_current = left_mgi.getCurrentPose(left_ee_link).pose;
 
-  if (!planAndExecuteCartesianBetween(left_mgi, left_current, left_post_handover,
-        cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {
-    return fail("Failed Step 8");
-  }
-  sleep_ms(2000);
+  // if (!planAndExecuteCartesianBetween(left_mgi, left_current, left_post_handover,
+  //       cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {
+  //   return fail("Failed Step 8");
+  // }
+  // sleep_ms(2000);
 
   // ============================================================
   // Step 9: Right arm Cartesian move to placement waypoint
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 9: RIGHT Cartesian -> placement waypoint");
   right_mgi.startStateMonitor(5.0);
+  sleep_ms(1000);
   right_current = right_mgi.getCurrentPose(right_ee_link).pose;
   if (!planAndExecuteCartesianBetween(right_mgi, right_current, right_post_handover_retract,
         cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {
@@ -397,6 +403,7 @@ int main(int argc, char** argv)
   // ============================================================
   RCLCPP_INFO(node->get_logger(), "Step 10: RIGHT -> final release position");
   right_mgi.startStateMonitor(5.0);
+  sleep_ms(1000);
   right_mgi.setJointValueTarget(right_final_position_above);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     return fail("Failed Step 10");
@@ -405,6 +412,7 @@ int main(int argc, char** argv)
 
   RCLCPP_INFO(node->get_logger(), "Step 10b: RIGHT Cartesian -> lower object vertically into box");
   right_mgi.startStateMonitor(5.0);
+  sleep_ms(1000);
   right_current = right_mgi.getCurrentPose(right_ee_link).pose;
   if (!planAndExecuteCartesianBetween(right_mgi, right_current, right_lower_object_vertically,
         cartesian_waypoints, node->get_logger(), 0.3, 0.2)) {

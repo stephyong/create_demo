@@ -11,8 +11,8 @@ find_package(Eigen3 REQUIRED)
 
 # REMOVED: find_package(shape_msgs REQUIRED) — no longer used
 
-add_executable(handover src/handover.cpp)
-ament_target_dependencies(handover
+add_executable(handover_demo src/handover.cpp)
+ament_target_dependencies(handover_demo
   rclcpp
   moveit_ros_planning_interface
   moveit_msgs
@@ -20,11 +20,11 @@ ament_target_dependencies(handover
   ur_msgs
 )
 
-target_link_libraries(handover
+target_link_libraries(handover_demo
   Eigen3::Eigen
 )
 
-install(TARGETS handover
+install(TARGETS handover_demo
   DESTINATION lib/${PROJECT_NAME}
 )
 install(DIRECTORY launch
