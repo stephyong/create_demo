@@ -398,7 +398,7 @@ int main(int argc, char** argv)
 
   if (!parallel_move(left_mgi, right_mgi, left_initial_position, right_initial_position, "Step 1"))
   return fail("Failed Step 1");
-  sleep_ms(2000);
+  sleep_ms(500);
 
 
   // RCLCPP_INFO(node->get_logger(), "right arm moves to pre-handover position 1");
@@ -474,6 +474,11 @@ int main(int argc, char** argv)
     return fail("Failed to retract");
   }
 
+  RCLCPP_INFO(node->get_logger(), "right arm goes to home position");
+  right_mgi.setJointValueTarget(right_initial_position);
+  if (!planAndExecute(right_mgi, node->get_logger())) {
+    return fail("Failed to go to right home position");
+  }
 
   RCLCPP_INFO(node->get_logger(), "Handover complete.");
 
