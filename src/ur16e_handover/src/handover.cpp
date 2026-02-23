@@ -334,23 +334,23 @@ int main(int argc, char** argv)
   right_controller->wait_for_action_server(5s);
 
   auto parallel_move = [&](
-  moveit::planning_interface::MoveGroupInterface& left_mgi,
-  moveit::planning_interface::MoveGroupInterface& right_mgi,
+  moveit::planning_interface::MoveGroupInterface& l_mgi,
+  moveit::planning_interface::MoveGroupInterface& r_mgi,
   const std::vector<double>& left_target,
   const std::vector<double>& right_target,
   const std::string& step_name) -> bool
   {
-    left_mgi.setStartStateToCurrentState();
-    right_mgi.setStartStateToCurrentState();
+    l_mgi.setStartStateToCurrentState();
+    r_mgi.setStartStateToCurrentState();
 
-    left_mgi.setJointValueTarget(left_target);
-    right_mgi.setJointValueTarget(right_target);
+    l_mgi.setJointValueTarget(left_target);
+    r_mgi.setJointValueTarget(right_target);
 
     moveit::planning_interface::MoveGroupInterface::Plan left_plan, right_plan;
 
     if (!run_parallel(
-      [&]() { return left_mgi.plan(left_plan) == moveit::core::MoveItErrorCode::SUCCESS; },
-      [&]() { return right_mgi.plan(right_plan) == moveit::core::MoveItErrorCode::SUCCESS; }
+      [&]() { return l_mgi.plan(left_plan) == moveit::core::MoveItErrorCode::SUCCESS; },
+      [&]() { return r_mgi.plan(right_plan) == moveit::core::MoveItErrorCode::SUCCESS; }
     )) {
       RCLCPP_ERROR(node->get_logger(), "Failed to plan: %s", step_name.c_str());
       return false;
@@ -401,91 +401,78 @@ int main(int argc, char** argv)
   sleep_ms(2000);
 
 
-  RCLCPP_INFO(node->get_logger(), "right arm moves to pre-handover position 2");
-  sleep_ms(1000);
-  right_mgi.setJointValueTarget(right_prehandover2);
-  if (!planAndExecute(right_mgi, node->get_logger())) {
-    return fail("Failed to go to right pre-handover position 2");
-  }
+  // RCLCPP_INFO(node->get_logger(), "right arm moves to pre-handover position 1");
+  // right_mgi.setJointValueTarget(right_prehandover1);
+  // if (!planAndExecute(right_mgi, node->get_logger())) {
+  //   return fail("Failed to go to right pre-handover position 2");
+  // }
  
 
-  RCLCPP_INFO(node->get_logger(), "left arm goes to handover position");
-  sleep_ms(1000);
-  left_mgi.setJointValueTarget(left_handover);
-  if (!planAndExecute(left_mgi, node->get_logger())) {
-    return fail("Failed to go to left handover position");
-  }
+  // RCLCPP_INFO(node->get_logger(), "left arm goes to handover position");
+  // sleep_ms(1000);
+  // left_mgi.setJointValueTarget(left_handover);
+  // if (!planAndExecute(left_mgi, node->get_logger())) {
+  //   return fail("Failed to go to left handover position");
+  // }
 
-  // if (!parallel_move(left_mgi, right_mgi, left_handover, right_handover, "Step 3"))
-  // return fail("Failed Step 3");
-  // sleep_ms(2000);
+  if (!parallel_move(left_mgi, right_mgi, left_handover, right_prehandover2, "Step 3"))
+  return fail("Failed Step 3");
+  sleep_ms(500);
 
   RCLCPP_INFO(node->get_logger(), "right arm moves to handover position");
-  sleep_ms(1000);
   right_mgi.setJointValueTarget(right_handover);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     return fail("Failed to go to right handover position");
   }
-  sleep_ms(2000);
+  sleep_ms(1000);
 
   
   RCLCPP_INFO(node->get_logger(), "Step 6: Closing right gripper");
   gripper_on(node, right_io, 13);
-  sleep_ms(5000);
+  sleep_ms(3000);
 
   RCLCPP_INFO(node->get_logger(), "Step 7: Opening left gripper");
   gripper_off(node, left_io, 13);
-  sleep_ms(5000);
+  sleep_ms(3000);
 
 
   RCLCPP_INFO(node->get_logger(), "right arm retracts back to pre-handover position 2");
-  sleep_ms(1000);
   right_mgi.setJointValueTarget(right_prehandover2);
   if (!planAndExecute(right_mgi, node->get_logger())) {
     return fail("Failed to retract to right pre-handover position 2");
   }
-  sleep_ms(2000);
-  
 
-  RCLCPP_INFO(node->get_logger(), "left arm retracts back to pre-handover position 1");
-  sleep_ms(1000);
-  left_mgi.setJointValueTarget(left_post_handover);
-  if (!planAndExecute(left_mgi, node->get_logger())) {
-    return fail("Failed to retract to left post-handover position");
-  }
-  sleep_ms(2000);
+  // RCLCPP_INFO(node->get_logger(), "left arm retracts back to pre-handover position 1");
+  // sleep_ms(1000);
+  // left_mgi.setJointValueTarget(left_post_handover);
+  // if (!planAndExecute(left_mgi, node->get_logger())) {
+  //   return fail("Failed to retract to left post-handover position");
+  // }
+ 
+  if (!parallel_move(left_mgi, right_mgi, left_post_handover, right_final_position_above, "left retracts, right positions up"))
+  return fail("Failed this step");
+  sleep_ms(500);
+  // RCLCPP_INFO(node->get_logger(), "right arm retracts back to initial position");
+  // sleep_ms(1000);
+  // right_mgi.setJointValueTarget(right_prehandover2_2);
+  // if (!planAndExecute(right_mgi, node->get_logger())) {
+  //   return fail("Failed to retract to right initial position");
+  // }
+  // sleep_ms(2000); 
 
-
-  RCLCPP_INFO(node->get_logger(), "right arm retracts back to initial position");
-  sleep_ms(1000);
-  right_mgi.setJointValueTarget(right_prehandover2_2);
-  if (!planAndExecute(right_mgi, node->get_logger())) {
-    return fail("Failed to retract to right initial position");
-  }
-  sleep_ms(2000); 
-
-
-  RCLCPP_INFO(node->get_logger(), "right arm goes perpendicular to the table");
-  sleep_ms(1000);
-  right_mgi.setJointValueTarget(right_final_position_above);
-  if (!planAndExecute(right_mgi, node->get_logger())) {
-    return fail("Failed to position arm perpendicular to table ");
-  }
-  sleep_ms(2000); 
-
-
-  RCLCPP_INFO(node->get_logger(), "right arm lowers object");
-  sleep_ms(1000);
-  right_mgi.setJointValueTarget(right_final_position_end);
-  if (!planAndExecute(right_mgi, node->get_logger())) {
-    return fail("Failed to lower object");
-  }
-  sleep_ms(2000); 
+  if (!parallel_move(left_mgi, right_mgi, left_final_position, right_final_position_end, "left go home, right lowers"))
+  return fail("Failed this step");
 
 
   RCLCPP_INFO(node->get_logger(), "opening right gripper");
   gripper_off(node, right_io, 13);
-  sleep_ms(5000);
+
+
+  RCLCPP_INFO(node->get_logger(), "right arm retracts");
+  right_mgi.setJointValueTarget(right_final_position_above);
+  if (!planAndExecute(right_mgi, node->get_logger())) {
+    return fail("Failed to retract");
+  }
 
 
   RCLCPP_INFO(node->get_logger(), "Handover complete.");
