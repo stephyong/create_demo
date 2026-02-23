@@ -8,6 +8,8 @@
 #include <moveit/trajectory_processing/iterative_time_parameterization.h>
 #include <moveit/robot_trajectory/robot_trajectory.h>
 #include "ur_msgs/srv/set_io.hpp"
+#include <control_msgs/action/follow_joint_trajectory.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
 
 #include <Eigen/Geometry>
 #include <thread>
@@ -289,14 +291,13 @@ int main(int argc, char** argv)
     RCLCPP_WARN(node->get_logger(), "Right SetIO service not available yet");
   }
 
-  // ---- Helper for running two functions in parallel and checking if both succeeded ----
   auto run_parallel = [&](auto left_fn, auto right_fn) {
-        std::atomic<bool> left_success(false), right_success(false);
-        std::thread left_thread([&]() { left_success = left_fn(); });
-        std::thread right_thread([&]() { right_success = right_fn(); });
-        left_thread.join();
-        right_thread.join();
-        return left_success.load() && right_success.load();
+    std::atomic<bool> left_success(false), right_success(false);
+    std::thread left_thread([&]() { left_success = left_fn(); });
+    std::thread right_thread([&]() { right_success = right_fn(); });
+    left_thread.join();
+    right_thread.join();
+    return left_success.load() && right_success.load();
     };
 
   // ---- MoveIt interfaces ----
@@ -321,51 +322,82 @@ int main(int argc, char** argv)
   right_mgi.setMaxVelocityScalingFactor(0.3);
   right_mgi.setMaxAccelerationScalingFactor(0.2);
 
-  sleep_ms(2000);
 
-  // RCLCPP_INFO(node->get_logger(), "Step 1a: left arm receives object");
-  // sleep_ms(1000);
-  // left_mgi.setJointValueTarget(left_initial_position);
-  // if (!planAndExecute(left_mgi, node->get_logger())) {
-  //   return fail("Failed Step 1");
-  // }
-  // sleep_ms(2000);
-  // RCLCPP_INFO(node->get_logger(), "Step 1b: right arm goes to initial position");
-  // sleep_ms(1000);
-  // right_mgi.setJointValueTarget(right_initial_position);
-  // if (!planAndExecute(right_mgi, node->get_logger())) {
-  //   return fail("Failed Step 1b");
-  // }
-  // sleep_ms(2000);
+  using FollowJT = control_msgs::action::FollowJointTrajectory;
+  // Create direct controller action clients
+  auto left_controller  = rclcpp_action::create_client<FollowJT>(node, 
+    "/left_scaled_joint_trajectory_controller/follow_joint_trajectory");
+  auto right_controller = rclcpp_action::create_client<FollowJT>(node, 
+    "/right_scaled_joint_trajectory_controller/follow_joint_trajectory");
+
+  left_controller->wait_for_action_server(5s);
+  right_controller->wait_for_action_server(5s);
+
+  auto parallel_move = [&](
+  moveit::planning_interface::MoveGroupInterface& left_mgi,
+  moveit::planning_interface::MoveGroupInterface& right_mgi,
+  const std::vector<double>& left_target,
+  const std::vector<double>& right_target,
+  const std::string& step_name) -> bool
+  {
+    left_mgi.setStartStateToCurrentState();
+    right_mgi.setStartStateToCurrentState();
+
+    left_mgi.setJointValueTarget(left_target);
+    right_mgi.setJointValueTarget(right_target);
+
+    moveit::planning_interface::MoveGroupInterface::Plan left_plan, right_plan;
+
+    if (!run_parallel(
+      [&]() { return left_mgi.plan(left_plan) == moveit::core::MoveItErrorCode::SUCCESS; },
+      [&]() { return right_mgi.plan(right_plan) == moveit::core::MoveItErrorCode::SUCCESS; }
+    )) {
+      RCLCPP_ERROR(node->get_logger(), "Failed to plan: %s", step_name.c_str());
+      return false;
+    }
+
+    auto left_goal  = FollowJT::Goal();
+    auto right_goal = FollowJT::Goal();
+    left_goal.trajectory  = left_plan.trajectory_.joint_trajectory;
+    right_goal.trajectory = right_plan.trajectory_.joint_trajectory;
+    left_goal.trajectory.header.stamp  = rclcpp::Time(0);
+    right_goal.trajectory.header.stamp = rclcpp::Time(0);
+
+    auto left_future  = left_controller->async_send_goal(left_goal);
+    auto right_future = right_controller->async_send_goal(right_goal);
+
+    auto left_goal_handle  = left_future.get();
+    auto right_goal_handle = right_future.get();
+
+    if (!left_goal_handle || !right_goal_handle) {
+      RCLCPP_ERROR(node->get_logger(), "Goal rejected: %s", step_name.c_str());
+      return false;
+    }
+
+    auto left_result  = left_controller->async_get_result(left_goal_handle).get();
+    auto right_result = right_controller->async_get_result(right_goal_handle).get();
+
+    if (left_result.code  != rclcpp_action::ResultCode::SUCCEEDED ||
+        right_result.code != rclcpp_action::ResultCode::SUCCEEDED) {
+      RCLCPP_ERROR(node->get_logger(), "Execution failed: %s", step_name.c_str());
+      return false;
+    }
+
+    return true;
+  };
+
+  sleep_ms(2000); 
 
   left_mgi.setStartStateToCurrentState();
   right_mgi.setStartStateToCurrentState();
   // Plan both arms first (in parallel)
   moveit::planning_interface::MoveGroupInterface::Plan left_plan, right_plan;
+  
 
-  left_mgi.setJointValueTarget(left_initial_position);
-  right_mgi.setJointValueTarget(right_initial_position);
+  RCLCPP_INFO(node->get_logger(), "Step 1: both arms moving to initial positions");
 
-  if (!run_parallel(
-    [&]() { return left_mgi.plan(left_plan) == moveit::core::MoveItErrorCode::SUCCESS; },
-    [&]() { return right_mgi.plan(right_plan) == moveit::core::MoveItErrorCode::SUCCESS; }
-  )) return fail("Failed to plan Step 1");
-
-  // Then execute both as close together as possible
-  if (!run_parallel(
-    [&]() { return left_mgi.execute(left_plan) == moveit::core::MoveItErrorCode::SUCCESS; },
-    [&]() { return right_mgi.execute(right_plan) == moveit::core::MoveItErrorCode::SUCCESS; }
-  )) return fail("Failed to execute Step 1");
-
-  sleep_ms(2000);
-
-
-  RCLCPP_INFO(node->get_logger(), "right arm moves to pre-handover position 1");
-  sleep_ms(1000);
-  right_mgi.setJointValueTarget(right_prehandover1);
-  if (!planAndExecute(right_mgi, node->get_logger())) {
-    return fail("Failed to go to right pre-handover position 1");
-  }
+  if (!parallel_move(left_mgi, right_mgi, left_initial_position, right_initial_position, "Step 1"))
+  return fail("Failed Step 1");
   sleep_ms(2000);
 
 
@@ -384,6 +416,9 @@ int main(int argc, char** argv)
     return fail("Failed to go to left handover position");
   }
 
+  // if (!parallel_move(left_mgi, right_mgi, left_handover, right_handover, "Step 3"))
+  // return fail("Failed Step 3");
+  // sleep_ms(2000);
 
   RCLCPP_INFO(node->get_logger(), "right arm moves to handover position");
   sleep_ms(1000);

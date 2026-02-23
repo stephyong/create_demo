@@ -9,10 +9,12 @@ find_package(geometry_msgs REQUIRED)
 find_package(ur_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(rclcpp_action REQUIRED)   
+find_package(control_msgs REQUIRED)  
 
-# Generate service interfaces FIRST
+
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "srv/robot_to_robot_handover.srv"
+  "srv/RobotToRobotHandover.srv"
 )
 
 rosidl_get_typesupport_target(cpp_typesupport_target
@@ -26,6 +28,8 @@ ament_target_dependencies(handover_demo
   moveit_msgs
   geometry_msgs
   ur_msgs
+  rclcpp_action         
+  control_msgs   
 )
 
 target_link_libraries(handover_demo
