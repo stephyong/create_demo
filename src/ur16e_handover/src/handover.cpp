@@ -228,9 +228,8 @@ int main(int argc, char** argv)
 
     // Pre-compute Cartesian poses from joint configs
     moveit::core::RobotStatePtr fk_state = right_mgi.getCurrentState();
-    
-    // right_prehandover2 → Cartesian pose
-    // right_prehandover2 → Cartesian pose
+
+    // right_prehandover2 in Cartesian pose
     fk_state->setJointGroupPositions(right_group_name, right_prehandover2);
     fk_state->updateLinkTransforms();
     Eigen::Isometry3d tf_pre = fk_state->getGlobalLinkTransform(right_ee_link);  // value copy, not reference
@@ -244,7 +243,7 @@ int main(int argc, char** argv)
     prehandover_pose.orientation.y = q_pre.y();
     prehandover_pose.orientation.z = q_pre.z();
 
-    // right_handover → Cartesian pose with +2cm Y offset
+    // right_handover in Cartesian pose with +2cm Y offset
     fk_state->setJointGroupPositions(right_group_name, right_handover);
     fk_state->updateLinkTransforms();
     Eigen::Isometry3d tf_hand = fk_state->getGlobalLinkTransform(right_ee_link);  // value copy, not reference
@@ -269,7 +268,7 @@ int main(int argc, char** argv)
     left_controller->wait_for_action_server(5s);
     right_controller->wait_for_action_server(5s);
 
-    // ---- run_parallel helper ----
+    // run_parallel helper 
     auto run_parallel = [&](auto left_fn, auto right_fn) -> bool {
         std::atomic<bool> left_success(false), right_success(false);
         std::thread lt([&]() { left_success  = left_fn();  });
@@ -347,11 +346,11 @@ int main(int argc, char** argv)
             if (handover_in_progress.exchange(true)) {
                 res->success = false;
                 res->message = "Handover already in progress";
-                RCLCPP_WARN(node->get_logger(), "run_handover called while busy — rejected");
+                RCLCPP_WARN(node->get_logger(), "robot_to_robot_handover called while busy — rejected");
                 return;
             }
 
-            RCLCPP_INFO(node->get_logger(), "run_handover service called — starting sequence");
+            RCLCPP_INFO(node->get_logger(), "robot_to_robot_handover service called — starting sequence");
 
             
 
@@ -403,6 +402,8 @@ int main(int argc, char** argv)
                   
                   }
                 sleep_ms(500);
+
+
                 RCLCPP_INFO(node->get_logger(), "Step 4: closing right gripper");
                 gripper_on(node, right_io, 13);
                 sleep_ms(3000);
