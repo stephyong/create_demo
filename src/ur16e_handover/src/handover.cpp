@@ -14,7 +14,7 @@
 
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/robot_trajectory/robot_trajectory.h>
-#include <moveit/trajectory_processing/iterative_parabolic_time_parameterization.h>
+#include <moveit/trajectory_processing/time_optimal_trajectory_generation.h>
 #include <moveit/robot_state/robot_state.h>
 
 
@@ -83,12 +83,13 @@ static bool planAndExecuteCartesianBetween(
     robot_trajectory::RobotTrajectory rt(mgi.getRobotModel(), mgi.getName());
     rt.setRobotTrajectoryMsg(*mgi.getCurrentState(), trajectory);
 
-    trajectory_processing::IterativeParabolicTimeParameterization iptp;
-    if (!iptp.computeTimeStamps(rt, velocity_scale, accel_scale)) {
+    trajectory_processing::TimeOptimalTrajectoryGeneration totg;
+    if (!totg.computeTimeStamps(rt, velocity_scale, accel_scale)) {
         RCLCPP_ERROR(logger, "Time parameterisation failed for '%s'",
                      mgi.getName().c_str());
         return false;
     }
+
 
     rt.getRobotTrajectoryMsg(trajectory);
     trajectory.joint_trajectory.header.stamp = rclcpp::Time(0);
@@ -249,7 +250,7 @@ int main(int argc, char** argv)
     Eigen::Isometry3d tf_hand = fk_state->getGlobalLinkTransform(right_ee_link);  // value copy, not reference
     geometry_msgs::msg::Pose handover_pose;
     handover_pose.position.x = tf_hand.translation().x();
-    handover_pose.position.y = tf_hand.translation().y() + 0.02;
+    handover_pose.position.y = tf_hand.translation().y() + 0.015;
     handover_pose.position.z = tf_hand.translation().z();
     Eigen::Quaterniond q_hand(tf_hand.rotation());
     handover_pose.orientation.w = q_hand.w();
@@ -338,136 +339,100 @@ int main(int argc, char** argv)
     // Service definition
 
     auto handover_service = node->create_service<std_srvs::srv::Trigger>(
-        "robot_to_robot_handover",
-        [&](const std::shared_ptr<std_srvs::srv::Trigger::Request> /*req*/,
-            std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+    "robot_to_robot_handover",
+    [&](const std::shared_ptr<std_srvs::srv::Trigger::Request> /*req*/,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+    {
+        if (handover_in_progress.exchange(true)) {
+            res->success = false;
+            res->message = "Handover already in progress";
+            RCLCPP_WARN(node->get_logger(), "robot_to_robot_handover called while busy — rejected");
+            return;
+        }
+
+        RCLCPP_INFO(node->get_logger(), "robot_to_robot_handover service called — starting sequence");
+
+        // Return immediately — no blocking
+        res->success = true;
+        res->message = "Handover sequence started";
+
+        std::thread([&]()
         {
-            // Reject if already running
-            if (handover_in_progress.exchange(true)) {
-                res->success = false;
-                res->message = "Handover already in progress";
-                RCLCPP_WARN(node->get_logger(), "robot_to_robot_handover called while busy — rejected");
-                return;
+            // Simplified fail_step — no promise needed
+            auto fail_step = [&](const std::string& msg) {
+                RCLCPP_ERROR(node->get_logger(), "%s", msg.c_str());
+                handover_in_progress = false;
+            };
+
+            left_mgi.setStartStateToCurrentState();
+            right_mgi.setStartStateToCurrentState();
+
+            RCLCPP_INFO(node->get_logger(), "Step 1: both arms to initial positions");
+            if (!parallel_move(left_mgi, right_mgi,
+                               left_initial_position, right_initial_position, "Step 1")) {
+                fail_step("Failed Step 1"); return;
             }
 
-            RCLCPP_INFO(node->get_logger(), "robot_to_robot_handover service called — starting sequence");
+            RCLCPP_INFO(node->get_logger(), "Step 2: left to handover, right to pre-handover2");
+            if (!parallel_move(left_mgi, right_mgi,
+                               left_handover, right_prehandover2, "Step 2")) {
+                fail_step("Failed Step 2"); return;
+            }
 
+
+            RCLCPP_INFO(node->get_logger(), "Step 3: right Cartesian move to handover");
+            if (!planAndExecuteCartesianBetween(right_mgi, prehandover_pose, handover_pose,
+                                                node->get_logger())) {
+                fail_step("Failed Step 3"); return;
+            }
             
 
-            std::promise<std::pair<bool, std::string>> result_promise;
-            auto result_future = result_promise.get_future();
+            RCLCPP_INFO(node->get_logger(), "Step 4: closing right gripper");
+            gripper_on(node, right_io, 13);
+            sleep_ms(1000);
 
-            std::thread([&, p = std::move(result_promise)]() mutable
-            {
-                // Convenience macro — sets result and returns from the lambda
-                auto fail_step = [&](std::promise<std::pair<bool,std::string>>& promise,
-                                     const std::string& msg) {
-                    RCLCPP_ERROR(node->get_logger(), "%s", msg.c_str());
-                    promise.set_value({false, msg});
-                    handover_in_progress = false;
-                };
+            RCLCPP_INFO(node->get_logger(), "Step 5: opening left gripper");
+            gripper_off(node, left_io, 13);
+            sleep_ms(1000);
 
-                sleep_ms(2000);
-                left_mgi.setStartStateToCurrentState();
-                right_mgi.setStartStateToCurrentState();
+            RCLCPP_INFO(node->get_logger(), "Step 6: right retracts to pre-handover2");
+            right_mgi.setJointValueTarget(right_prehandover2);
+            if (!planAndExecute(right_mgi, node->get_logger())) {
+                fail_step("Failed Step 6"); return;
+            }
 
+            RCLCPP_INFO(node->get_logger(), "Step 7: left post-handover, right above final");
+            if (!parallel_move(left_mgi, right_mgi,
+                               left_post_handover, right_final_position_above, "Step 7")) {
+                fail_step("Failed Step 7"); return;
+            }
 
-                RCLCPP_INFO(node->get_logger(), "Step 1: both arms to initial positions");
-                if (!parallel_move(left_mgi, right_mgi,
-                                   left_initial_position, right_initial_position, "Step 1")) {
-                    fail_step(p, "Failed Step 1"); return;
-                }
-                sleep_ms(500);
+            RCLCPP_INFO(node->get_logger(), "Step 8: left goes home, right goes to final");
+            if (!parallel_move(left_mgi, right_mgi,
+                               left_final_position, right_final_position_end, "Step 8")) {
+                fail_step("Failed Step 8"); return;
+            }
 
+            RCLCPP_INFO(node->get_logger(), "Step 9: opening right gripper");
+            gripper_off(node, right_io, 13);
 
-                RCLCPP_INFO(node->get_logger(), "Step 2: left to handover, right to pre-handover2");
-                if (!parallel_move(left_mgi, right_mgi,
-                                   left_handover, right_prehandover2, "Step 2")) {
-                    fail_step(p, "Failed Step 2"); return;
-                }
-                sleep_ms(500);
+            RCLCPP_INFO(node->get_logger(), "Step 10: right retracts above final");
+            right_mgi.setJointValueTarget(right_final_position_above);
+            if (!planAndExecute(right_mgi, node->get_logger())) {
+                fail_step("Failed Step 10"); return;
+            }
 
+            RCLCPP_INFO(node->get_logger(), "Step 11: right to home");
+            right_mgi.setJointValueTarget(right_initial_position);
+            if (!planAndExecute(right_mgi, node->get_logger())) {
+                fail_step("Failed Step 11"); return;
+            }
 
-                // RCLCPP_INFO(node->get_logger(), "Step 3: right arm to handover position");
-                // right_mgi.setJointValueTarget(right_handover);
-                // if (!planAndExecute(right_mgi, node->get_logger())) {
-                //     fail_step(p, "Failed Step 3: right to handover"); return;
-                // }
-                // sleep_ms(1000);
+            RCLCPP_INFO(node->get_logger(), "Handover complete.");
+            handover_in_progress = false;
 
-                RCLCPP_INFO(node->get_logger(), "Step 3: right Cartesian move to handover (updated 2cm in the Y direction)");
-                if (!planAndExecuteCartesianBetween(right_mgi, prehandover_pose, handover_pose,
-                                                    node->get_logger())) {
-                    fail_step(p, "Failed Step 3"); return;
-                  
-                  }
-                sleep_ms(500);
-
-
-                RCLCPP_INFO(node->get_logger(), "Step 4: closing right gripper");
-                gripper_on(node, right_io, 13);
-                sleep_ms(3000);
-
-
-                RCLCPP_INFO(node->get_logger(), "Step 5: opening left gripper");
-                gripper_off(node, left_io, 13);
-                sleep_ms(3000);
-
-
-                RCLCPP_INFO(node->get_logger(), "Step 6: right retracts to pre-handover2");
-                right_mgi.setJointValueTarget(right_prehandover2);
-                if (!planAndExecute(right_mgi, node->get_logger())) {
-                    fail_step(p, "Failed Step 6: right retract to pre-handover2"); return;
-                }
-
-
-                RCLCPP_INFO(node->get_logger(), "Step 7: left post-handover, right above final");
-                if (!parallel_move(left_mgi, right_mgi,
-                                   left_post_handover, right_final_position_above,
-                                   "Step 7")) {
-                    fail_step(p, "Failed Step 7"); return;
-                }
-                sleep_ms(500);
-
-                
-                RCLCPP_INFO(node->get_logger(), "Step 8: left goes home, right goes to final");
-                if (!parallel_move(left_mgi, right_mgi,
-                                   left_final_position, right_final_position_end,
-                                   "Step 8")) {
-                    fail_step(p, "Failed Step 8"); return;
-                }
-
-
-                RCLCPP_INFO(node->get_logger(), "Step 9: opening right gripper");
-                gripper_off(node, right_io, 13);
-
-
-
-                RCLCPP_INFO(node->get_logger(), "Step 10: right retracts above final");
-                right_mgi.setJointValueTarget(right_final_position_above);
-                if (!planAndExecute(right_mgi, node->get_logger())) {
-                    fail_step(p, "Failed Step 10: right retract above"); return;
-                }
-
-
-                RCLCPP_INFO(node->get_logger(), "Step 11: right→home");
-                right_mgi.setJointValueTarget(right_initial_position);
-                if (!planAndExecute(right_mgi, node->get_logger())) {
-                    fail_step(p, "Failed Step 11: right home"); return;
-                }
-
-                RCLCPP_INFO(node->get_logger(), "Handover complete.");
-                p.set_value({true, "Handover complete"});
-                handover_in_progress = false;
-
-            }).detach();
-
-
-
-            auto result = result_future.get();
-            res->success = result.first;
-            res->message = result.second;
-        });
+        }).detach();
+    });
 
     RCLCPP_INFO(node->get_logger(),
                 "handover_demo ready — call /robot_to_robot_handover (std_srvs/Trigger) to start");
@@ -475,4 +440,4 @@ int main(int argc, char** argv)
     // Keep main alive; executor runs in spinner thread
     spinner.join();
     return 0;
-}
+}  // ← closes main()

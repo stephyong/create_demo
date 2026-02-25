@@ -4,11 +4,12 @@ project(ur16e_handover)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
+find_package(moveit_core REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(ur_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
-find_package(rclcpp_action REQUIRED)   
+find_package(rclcpp_action REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 
@@ -17,16 +18,22 @@ add_executable(handover_demo src/handover.cpp)
 ament_target_dependencies(handover_demo
   rclcpp
   moveit_ros_planning_interface
+  moveit_core
   moveit_msgs
   geometry_msgs
   ur_msgs
-  rclcpp_action         
+  rclcpp_action
   control_msgs
   std_srvs
 )
 
 target_link_libraries(handover_demo
   Eigen3::Eigen
+  ${moveit_core_LIBRARIES}
+)
+
+target_include_directories(handover_demo PUBLIC
+  ${moveit_core_INCLUDE_DIRS}
 )
 
 install(TARGETS handover_demo
